@@ -1,0 +1,65 @@
+Metadata-Version: 2.4
+Name: cortex-memory
+Version: 4.0.0a1
+Summary: The Sovereign Ledger for AI Agents — local-first memory infrastructure with vector search, temporal facts, and cryptographic vaults.
+Author-email: Borja Moskv <borja@moskv.com>
+License: MIT
+Keywords: ai,memory,agents,sovereign,vector-search,sqlite
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Topic :: Scientific/Engineering :: Artificial Intelligence
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: sqlite-vec>=0.1.6
+Requires-Dist: sentence-transformers>=3.0
+Requires-Dist: onnxruntime>=1.17
+Requires-Dist: click>=8.0
+Requires-Dist: rich>=13.0
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0; extra == "dev"
+Requires-Dist: pytest-cov>=5.0; extra == "dev"
+
+# CORTEX — The Sovereign Ledger for AI Agents
+
+> Local-first memory infrastructure with vector search, temporal facts, and cryptographic vaults. Zero network dependencies.
+
+## Quick Start
+
+```bash
+# Install
+pip install -e .
+
+# Initialize database
+cortex init
+
+# Store a fact
+cortex store naroa-web "Uses vanilla JS, no framework, Industrial Noir aesthetic"
+
+# Semantic search
+cortex search "what framework does naroa use?"
+
+# Recall project context
+cortex recall naroa-web
+
+# Import from CORTEX v3.1
+cortex migrate
+
+# Check status
+cortex status
+```
+
+## Architecture
+
+```
+SQLite + sqlite-vec (vector search)
+  + Temporal Facts (valid_from/valid_until)
+  + ONNX Embeddings (local, ~5ms/embed)
+  + Hash-Chained Transaction Ledger
+  = The Sovereign Ledger
+```
+
+## License
+
+MIT

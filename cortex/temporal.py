@@ -1,0 +1,55 @@
+"""
+CORTEX v4.0 — Temporal Fact Management.
+
+Handles versioned facts with valid_from/valid_until semantics.
+Never deletes — only deprecates. Enables time-travel queries.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+
+
+def now_iso() -> str:
+    """Return current UTC timestamp in ISO 8601 format."""
+    return datetime.now(timezone.utc).isoformat()
+
+
+def is_valid_at(valid_from: str, valid_until: str | None, at: str | None = None) -> bool:
+    """Check if a fact is valid at a specific point in time.
+
+    Args:
+        valid_from: ISO 8601 timestamp when fact became valid.
+        valid_until: ISO 8601 timestamp when fact was deprecated (None = still valid).
+        at: ISO 8601 timestamp to check against (None = now).
+
+    Returns:
+        True if the fact was valid at the given time.
+    """
+    check_time = at or now_iso()
+
+    if valid_from > check_time:
+        return False
+
+    if valid_until is not None and valid_until <= check_time:
+        return False
+
+    return True
+
+
+def build_temporal_filter_params(as_of: str | None = None) -> tuple[str, list]:
+    """Build parameterized SQL WHERE clause for temporal filtering.
+
+    Args:
+        as_of: ISO 8601 timestamp. None = current facts only.
+
+    Returns:
+        Tuple of (SQL WHERE clause, parameters list).
+    """
+    if as_of is None:
+        return "valid_until IS NULL", []
+    else:
+        return (
+            "valid_from <= ? AND (valid_until IS NULL OR valid_until > ?)",
+            [as_of, as_of],
+        )

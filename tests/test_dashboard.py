@@ -7,34 +7,35 @@ import pytest
 from datetime import datetime, timedelta, timezone
 from fastapi.testclient import TestClient
 
-# Set test DB before importing api — use unique file to avoid _conn conflicts
-_test_db = tempfile.mktemp(suffix="_dashboard.db")
-os.environ["CORTEX_DB"] = _test_db
 
-from cortex.api import app, tracker as global_tracker
-
-
-@pytest.fixture(scope="module")
-def client():
-    with TestClient(app) as c:
-        yield c
+@pytest.fixture()
+def dashboard_env(tmp_path):
+    """Create isolated DB for each test to avoid connection locking."""
+    db = str(tmp_path / "dashboard_test.db")
+    os.environ["CORTEX_DB"] = db
+    # Force fresh module state — reimport not needed because api reads env at lifespan
+    yield db
+    os.environ.pop("CORTEX_DB", None)
 
 
-@pytest.fixture(scope="module")
-def api_key(client):
-    resp = client.post("/v1/admin/keys?name=test-key&tenant_id=test")
-    return resp.json()["key"]
-
-
-@pytest.fixture(scope="module")
-def auth_headers(api_key):
-    return {"Authorization": f"Bearer {api_key}"}
+@pytest.fixture()
+def client(dashboard_env):
+    # Import here so CORTEX_DB env is set before the module-level DB_PATH reads it
+    # We need to patch the DB_PATH directly since it's read at import time
+    import cortex.api as api_mod
+    original_db = api_mod.DB_PATH
+    api_mod.DB_PATH = dashboard_env
+    try:
+        with TestClient(api_mod.app) as c:
+            yield c, api_mod
+    finally:
+        api_mod.DB_PATH = original_db
 
 
 def test_daily_method(client):
     """Test TimingTracker.daily() via the global tracker (lifespan-initialized)."""
-    # client fixture ensures lifespan has run → global_tracker is ready
-    tracker = global_tracker
+    c, api_mod = client
+    tracker = api_mod.tracker
 
     now = datetime.now(timezone.utc)
 
@@ -58,8 +59,14 @@ def test_daily_method(client):
     assert stats[-1]["date"] == now.strftime("%Y-%m-%d")
 
 
-def test_history_endpoint(client, auth_headers):
-    resp = client.get("/v1/time/history?days=5", headers=auth_headers)
+def test_history_endpoint(client):
+    c, api_mod = client
+    # Create an API key for this test
+    resp = c.post("/v1/admin/keys?name=test-key&tenant_id=test")
+    api_key = resp.json()["key"]
+    headers = {"Authorization": f"Bearer {api_key}"}
+
+    resp = c.get("/v1/time/history?days=5", headers=headers)
     assert resp.status_code == 200
     data = resp.json()
     assert isinstance(data, list)

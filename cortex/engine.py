@@ -100,7 +100,9 @@ class CortexEngine:
         if self._conn is not None:
             return self._conn
 
-        self._conn = sqlite3.connect(str(self._db_path))
+        self._conn = sqlite3.connect(
+            str(self._db_path), timeout=10, check_same_thread=False
+        )
 
         # Load sqlite-vec extension — handles both standard and restricted builds
         try:

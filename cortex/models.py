@@ -32,6 +32,8 @@ class SearchRequest(BaseModel):
     k: int = Field(5, ge=1, le=50, description="Number of results")
     project: str | None = Field(None, max_length=100, description="Filter by project")
     as_of: Optional[str] = Field(None, description="Temporal filter (ISO 8601)")
+    fact_type: Optional[str] = Field(None, description="Filter by fact type")
+    tags: Optional[List[str]] = Field(None, description="Filter by tags")
     
     @field_validator("query")
     def not_empty(cls, v: str) -> str:
@@ -48,6 +50,12 @@ class SearchResult(BaseModel):
     score: float
     tags: list[str]
     consensus_score: float = 1.0
+    created_at: str
+    updated_at: str
+    valid_from: Optional[str] = None
+    valid_until: Optional[str] = None
+    tx_id: Optional[int] = None
+    hash: Optional[str] = None
 
 
 class VoteRequest(BaseModel):
@@ -98,11 +106,14 @@ class FactResponse(BaseModel):
     fact_type: str
     tags: list[str]
     created_at: str
-    valid_from: str
-    valid_until: str | None
-    metadata: dict | None
+    updated_at: str
+    valid_from: Optional[str] = None
+    valid_until: Optional[str] = None
+    metadata: dict | None = None
     confidence: str = "stated"
     consensus_score: float = 1.0
+    tx_id: Optional[int] = None
+    hash: Optional[str] = None
 
 
 class StatusResponse(BaseModel):
@@ -133,3 +144,33 @@ class TimeSummaryResponse(BaseModel):
     entries: int
     heartbeats: int
     top_entities: list[list]  # [[entity, count], ...]
+
+
+# ─── Mission Models ──────────────────────────────────────────────────
+
+class MissionLaunchRequest(BaseModel):
+    project: str = Field(..., max_length=100)
+    goal: str = Field(..., max_length=2000)
+    formation: str = "IRON_DOME"
+    agents: int = Field(10, ge=1, le=50)
+
+
+class MissionResponse(BaseModel):
+    intent_id: int
+    result_id: Optional[int] = None
+    status: str
+    stdout: Optional[str] = None
+    stderr: Optional[str] = None
+
+
+class LedgerReportResponse(BaseModel):
+    valid: bool
+    violations: List[Dict[str, Any]]
+    tx_checked: int
+    roots_checked: int
+
+
+class CheckpointResponse(BaseModel):
+    checkpoint_id: Optional[int]
+    message: str
+    status: str = "success"

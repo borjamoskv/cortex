@@ -14,6 +14,7 @@ from cortex.models import (
     StoreRequest, StoreResponse, FactResponse, 
     VoteRequest, VoteResponse, VoteV2Request
 )
+from cortex.api_deps import get_engine
 
 logger = logging.getLogger("cortex.api.facts")
 router = APIRouter(tags=["facts"])
@@ -23,10 +24,11 @@ router = APIRouter(tags=["facts"])
 async def store_fact(
     req: StoreRequest,
     auth: AuthResult = Depends(require_permission("write")),
+    engine: CortexEngine = Depends(get_engine),
 ) -> StoreResponse:
     """Store a fact with automatic tenant isolation."""
     fact_id = await run_in_threadpool(
-        api_state.engine.store,
+        engine.store,
         project=auth.tenant_id,
         content=req.content,
         fact_type=req.fact_type,
@@ -45,12 +47,13 @@ async def recall_project(
     project: str,
     limit: Optional[int] = Query(None, ge=1, le=1000),
     auth: AuthResult = Depends(require_permission("read")),
+    engine: CortexEngine = Depends(get_engine),
 ) -> List[FactResponse]:
     """Recall facts for a specific project with tenant isolation."""
     if project != auth.tenant_id:
         raise HTTPException(status_code=403, detail="Forbidden: Namespace mismatch")
 
-    facts = await run_in_threadpool(api_state.engine.recall, project=project, limit=limit)
+    facts = await run_in_threadpool(engine.recall, project=project, limit=limit)
     
     return [
         FactResponse(
@@ -59,12 +62,15 @@ async def recall_project(
             content=f.content,
             fact_type=f.fact_type,
             tags=f.tags,
-            created_at=f.valid_from, # Using valid_from as created_at proxy
+            created_at=f.created_at,
+            updated_at=f.updated_at,
             valid_from=f.valid_from,
             valid_until=f.valid_until,
             metadata=f.meta if f.meta else None,
             confidence=f.confidence,
             consensus_score=f.consensus_score,
+            hash=f.hash,
+            tx_id=f.tx_id,
         )
         for f in facts
     ]

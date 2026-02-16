@@ -219,6 +219,16 @@ def _sync_ghosts(engine: CortexEngine, path: Path, result: SyncResult) -> None:
             result.errors.append(f"Error sincronizando ghost {project_name}: {e}")
 
 
+def _calculate_fact_diff(existing: set[str], candidates: list[dict], content_generator: Any) -> list[tuple[str, dict]]:
+    """Calcula qué hechos son nuevos comparándolos con lo existente."""
+    results = []
+    for c in candidates:
+        content = content_generator(c)
+        if content not in existing:
+            results.append((content, c))
+    return results
+
+
 def _sync_system(engine: CortexEngine, path: Path, result: SyncResult) -> None:
     """Sincroniza system.json — conocimiento global y decisiones.
 
@@ -234,50 +244,47 @@ def _sync_system(engine: CortexEngine, path: Path, result: SyncResult) -> None:
     # Obtener contenidos existentes para dedup
     existing = _get_existing_contents(engine, "__system__")
 
-    # Conocimiento global
-    for ki in data.get("knowledge_global", []):
-        content = ki.get("content", str(ki))
-        if content in existing:
-            result.skipped += 1
-            continue
+    # knowledge_global
+    kb_candidates = data.get("knowledge_global", [])
+    new_kb = _calculate_fact_diff(existing, kb_candidates, lambda x: x.get("content", str(x)))
+    for content, kb in new_kb:
         try:
             engine.store(
                 project="__system__",
                 content=content,
                 fact_type="knowledge",
-                tags=["sistema", ki.get("topic", "general")],
-                confidence=ki.get("confidence", "stated"),
+                tags=["sistema", kb.get("topic", "general")],
+                confidence=kb.get("confidence", "stated"),
                 source="sync-agent-memory",
-                valid_from=ki.get("added"),
-                meta=ki,
+                valid_from=kb.get("added") or kb.get("date"),
+                meta=kb,
             )
             result.facts_synced += 1
             existing.add(content)
-        except (sqlite3.Error, ValueError) as e:
-            result.errors.append(f"Error sincronizando knowledge {ki.get('id', '?')}: {e}")
+        except Exception as e:
+            result.errors.append(f"Error system knowledge: {e}")
 
-    # Decisiones globales
-    for decision in data.get("decisions_global", []):
-        content = decision.get("decision", str(decision))
-        if content in existing:
-            result.skipped += 1
-            continue
+    # decisions_global
+    dec_candidates = data.get("decisions_global", [])
+    new_dec = _calculate_fact_diff(existing, dec_candidates, lambda x: f"DECISION: {x.get('decision', str(x))} | RAZON: {x.get('reason', '')}")
+    for content, dec in new_dec:
         try:
             engine.store(
                 project="__system__",
                 content=content,
                 fact_type="decision",
-                tags=["sistema", "decision-global"],
+                tags=["sistema", "decision-global", dec.get("topic", "")],
                 confidence="verified",
                 source="sync-agent-memory",
-                meta=decision,
+                valid_from=dec.get("date"),
+                meta=dec,
             )
             result.facts_synced += 1
             existing.add(content)
-        except (sqlite3.Error, ValueError) as e:
-            result.errors.append(f"Error sincronizando decisión {decision.get('id', '?')}: {e}")
+        except Exception as e:
+            result.errors.append(f"Error system decision: {e}")
 
-    # Ecosistema — resumen de estado
+    # Ecosistema
     eco = data.get("ecosystem", {})
     if eco:
         eco_content = (
@@ -297,88 +304,66 @@ def _sync_system(engine: CortexEngine, path: Path, result: SyncResult) -> None:
                     meta=eco,
                 )
                 result.facts_synced += 1
-            except (sqlite3.Error, ValueError) as e:
-                result.errors.append(f"Error sincronizando ecosistema: {e}")
+            except Exception as e:
+                result.errors.append(f"Error ecosystem sync: {e}")
 
 
 def _sync_mistakes(engine: CortexEngine, path: Path, result: SyncResult) -> None:
-    """Sincroniza mistakes.jsonl — memoria de errores.
-
-    Cada error se identifica por su combinación proyecto + descripción
-    para evitar duplicados.
-    """
+    """Sincroniza mistakes.jsonl — memoria de errores."""
     existing = _get_existing_contents(engine, None, fact_type="error")
+    lines = [json.loads(l) for l in path.read_text(encoding="utf-8").strip().splitlines() if l.strip()]
+    
+    def generate_content(m):
+        return (f"ERROR: {m.get('error', 'desconocido')} | "
+                f"CAUSA: {m.get('root_cause', 'desconocida')} | "
+                f"FIX: {m.get('fix', 'desconocido')}")
 
-    for line in path.read_text(encoding="utf-8").strip().splitlines():
-        if not line.strip():
-            continue
+    new_mistakes = _calculate_fact_diff(existing, lines, generate_content)
+    for content, m in new_mistakes:
         try:
-            mistake = json.loads(line)
-            project = mistake.get("project", "__system__")
-
-            content = (
-                f"ERROR: {mistake.get('error', 'desconocido')} | "
-                f"CAUSA: {mistake.get('root_cause', 'desconocida')} | "
-                f"FIX: {mistake.get('fix', 'desconocido')}"
-            )
-
-            if content in existing:
-                result.skipped += 1
-                continue
-
             engine.store(
-                project=project,
+                project=m.get("project", "__system__"),
                 content=content,
                 fact_type="error",
-                tags=mistake.get("tags", []),
+                tags=m.get("tags", []),
                 confidence="verified",
                 source="sync-agent-memory",
-                valid_from=mistake.get("date"),
-                meta=mistake,
+                valid_from=m.get("date"),
+                meta=m,
             )
             result.errors_synced += 1
             existing.add(content)
-        except (json.JSONDecodeError, sqlite3.Error, ValueError) as e:
-            result.errors.append(f"Error sincronizando mistake: {e}")
+        except Exception as e:
+            result.errors.append(f"Error sync mistake: {e}")
 
 
 def _sync_bridges(engine: CortexEngine, path: Path, result: SyncResult) -> None:
-    """Sincroniza bridges.jsonl — conexiones entre proyectos.
-
-    Cada bridge se identifica por su contenido completo para evitar duplicados.
-    """
+    """Sincroniza bridges.jsonl — conexiones entre proyectos."""
     existing = _get_existing_contents(engine, "__bridges__", fact_type="bridge")
+    lines = [json.loads(l) for l in path.read_text(encoding="utf-8").strip().splitlines() if l.strip()]
 
-    for line in path.read_text(encoding="utf-8").strip().splitlines():
-        if not line.strip():
-            continue
+    def generate_content(b):
+        return (f"BRIDGE: {b.get('from', '?')} → {b.get('to', '?')} | "
+                f"Patrón: {b.get('pattern', '?')} | "
+                f"Nota: {b.get('note', '')}")
+
+    new_bridges = _calculate_fact_diff(existing, lines, generate_content)
+    for content, b in new_bridges:
         try:
-            bridge = json.loads(line)
-
-            content = (
-                f"BRIDGE: {bridge.get('from', '?')} → {bridge.get('to', '?')} | "
-                f"Patrón: {bridge.get('pattern', '?')} | "
-                f"Nota: {bridge.get('note', '')}"
-            )
-
-            if content in existing:
-                result.skipped += 1
-                continue
-
             engine.store(
                 project="__bridges__",
                 content=content,
                 fact_type="bridge",
-                tags=[bridge.get("from", ""), bridge.get("to", ""), bridge.get("pattern", "")],
+                tags=[b.get("from", ""), b.get("to", ""), b.get("pattern", "")],
                 confidence="verified",
                 source="sync-agent-memory",
-                valid_from=bridge.get("date"),
-                meta=bridge,
+                valid_from=b.get("date"),
+                meta=b,
             )
             result.bridges_synced += 1
             existing.add(content)
-        except (json.JSONDecodeError, sqlite3.Error, ValueError) as e:
-            result.errors.append(f"Error sincronizando bridge: {e}")
+        except Exception as e:
+            result.errors.append(f"Error sync bridge: {e}")
 
 
 # ─── Utilidades ──────────────────────────────────────────────────────

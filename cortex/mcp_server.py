@@ -33,11 +33,7 @@ def create_mcp_server(db_path: str = "~/.cortex/cortex.db") -> "FastMCP":
     from cortex.engine import CortexEngine
     from cortex.ledger import ImmutableLedger
 
-    mcp = FastMCP(
-        "CORTEX Memory",
-        description="Sovereign memory infrastructure for AI agents. "
-        "Store, search, and recall facts with semantic search and temporal queries.",
-    )
+    mcp = FastMCP("CORTEX Memory")
 
     # Resolve path once
     full_db_path = os.path.expanduser(db_path)

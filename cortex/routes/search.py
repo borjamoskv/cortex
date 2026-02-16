@@ -31,6 +31,10 @@ async def search_facts(
             fact_type=r.fact_type,
             score=r.score,
             tags=r.tags,
+            created_at=r.created_at,
+            updated_at=r.updated_at,
+            tx_id=r.tx_id,
+            hash=r.hash,
         )
         for r in results
     ]
@@ -59,6 +63,10 @@ async def search_facts_get(
             fact_type=r.fact_type,
             score=r.score,
             tags=r.tags,
+            created_at=r.created_at,
+            updated_at=r.updated_at,
+            tx_id=r.tx_id,
+            hash=r.hash,
         )
         for r in results
     ]

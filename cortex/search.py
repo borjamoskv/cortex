@@ -29,9 +29,13 @@ class SearchResult:
     valid_from: str
     valid_until: Optional[str]
     tags: list[str]
+    created_at: str
+    updated_at: str
     score: float = 0.0
     source: Optional[str] = None
     meta: dict = field(default_factory=dict)
+    tx_id: Optional[int] = None
+    hash: Optional[str] = None
 
     def to_dict(self) -> dict:
         return {
@@ -74,9 +78,10 @@ def semantic_search(
         SELECT
             f.id, f.content, f.project, f.fact_type, f.confidence,
             f.valid_from, f.valid_until, f.tags, f.source, f.meta,
-            ve.distance
+            ve.distance, f.created_at, f.updated_at, f.tx_id, t.hash
         FROM fact_embeddings AS ve
         JOIN facts AS f ON f.id = ve.fact_id
+        LEFT JOIN transactions t ON f.tx_id = t.id
         WHERE ve.embedding MATCH ?
             AND k = ?
     """
@@ -130,6 +135,10 @@ def semantic_search(
             source=row[8],
             meta=meta,
             score=score,
+            created_at=row[11] if len(row) > 11 else "unknown",
+            updated_at=row[12] if len(row) > 12 else "unknown",
+            tx_id=row[13] if len(row) > 13 else None,
+            hash=row[14] if len(row) > 14 else None,
         ))
 
     return results
@@ -159,34 +168,36 @@ def text_search(
     """
     try:
         sql = """
-            SELECT id, content, project, fact_type, confidence,
-                   valid_from, valid_until, tags, source, meta
-            FROM facts
-            WHERE content LIKE ?
+            SELECT f.id, f.content, f.project, f.fact_type, f.confidence,
+                   f.valid_from, f.valid_until, f.tags, f.source, f.meta,
+                   f.created_at, f.updated_at, f.tx_id, t.hash
+            FROM facts f
+            LEFT JOIN transactions t ON f.tx_id = t.id
+            WHERE f.content LIKE ?
         """
         params: list = [f"%{query}%"]
 
         if as_of:
-            clause, t_params = build_temporal_filter_params(as_of)
+            clause, t_params = build_temporal_filter_params(as_of, table_alias="f")
             sql += " AND " + clause
             params.extend(t_params)
         else:
-            sql += " AND valid_until IS NULL"
+            sql += " AND f.valid_until IS NULL"
 
         if project:
-            sql += " AND project = ?"
+            sql += " AND f.project = ?"
             params.append(project)
 
         if fact_type:
-            sql += " AND fact_type = ?"
+            sql += " AND f.fact_type = ?"
             params.append(fact_type)
 
         if tags:
             for tag in tags:
-                sql += " AND tags LIKE ?"
+                sql += " AND f.tags LIKE ?"
                 params.append(f'%"{tag}"%')
 
-        sql += " ORDER BY updated_at DESC LIMIT ?"
+        sql += " ORDER BY f.updated_at DESC LIMIT ?"
         params.append(limit)
 
         cursor = conn.execute(sql, params)
@@ -218,6 +229,10 @@ def text_search(
             source=row[8],
             meta=meta,
             score=0.5,  # Flat score for text search
+            created_at=row[10] if len(row) > 10 else "unknown",
+            updated_at=row[11] if len(row) > 11 else "unknown",
+            tx_id=row[12] if len(row) > 12 else None,
+            hash=row[13] if len(row) > 13 else None,
         ))
 
     return results

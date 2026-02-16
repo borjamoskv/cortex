@@ -23,6 +23,7 @@ dependencies = [
     "onnxruntime>=1.17",
     "click>=8.0",
     "rich>=13.0",
+    "neo4j>=5.0",
 ]
 
 [project.optional-dependencies]

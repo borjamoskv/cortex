@@ -50,7 +50,7 @@ moskv-daemon uninstall
 | **Stale Projects** | No activity >48h in `ghosts.json` | macOS notification |
 | **Memory Freshness** | `system.json` not updated >24h | macOS notification |
 
-## REST API
+## REST API v4.1
 
 ```bash
 # Start server
@@ -60,7 +60,7 @@ uvicorn cortex.api:app --port 8484
 GET  /v1/status                  # Engine status
 POST /v1/facts                   # Store a fact  
 POST /v1/search                  # Semantic search
-GET  /v1/recall/{project}        # Recall project context
+GET  /v1/projects/{project}/facts # Recall project context (with metadata)
 GET  /v1/time/today              # Today's time tracking
 GET  /v1/time/history?days=14    # Time history
 GET  /v1/daemon/status           # Daemon watchdog results
@@ -82,7 +82,7 @@ SQLite + sqlite-vec (vector search)
 ## Testing
 
 ```bash
-pytest tests/ -v    # 85 tests
+pytest tests/ -v    # 52 tests
 ```
 
 ## License

@@ -24,6 +24,12 @@ ALLOWED_ORIGINS = os.environ.get(
 RATE_LIMIT = int(os.environ.get("CORTEX_RATE_LIMIT", "300"))
 RATE_WINDOW = int(os.environ.get("CORTEX_RATE_WINDOW", "60"))
 
+# Graph Configuration
+GRAPH_BACKEND = os.environ.get("CORTEX_GRAPH_BACKEND", "sqlite") # sqlite or neo4j
+NEO4J_URI = os.environ.get("CORTEX_NEO4J_URI", "bolt://localhost:7687")
+NEO4J_USER = os.environ.get("CORTEX_NEO4J_USER", "neo4j")
+NEO4J_PASSWORD = os.environ.get("CORTEX_NEO4J_PASSWORD", "password")
+
 # Ensure directories exist
 CORTEX_DIR.mkdir(parents=True, exist_ok=True)
 Path(AGENT_DIR / "memory").mkdir(parents=True, exist_ok=True)

@@ -23,6 +23,7 @@ from cortex.timing import TimingTracker
 
 console = Console()
 from cortex.config import DEFAULT_DB_PATH
+from cortex.launchpad import MissionOrchestrator
 DEFAULT_DB = str(DEFAULT_DB_PATH)
 
 
@@ -263,6 +264,49 @@ def migrate(source, db) -> None:
             f"Bridges imported: {stats['bridges_imported']}\n"
             f"Sessions imported: {stats['sessions_imported']}",
             title="🔄 v3.1 → v4.0 Migration",
+            border_style="green",
+        ))
+    finally:
+        engine.close()
+
+
+@cli.command("migrate-graph")
+@click.option("--db", default=DEFAULT_DB, help="Database path")
+def migrate_graph(db) -> None:
+    """Migrate local SQLite graph data to Neo4j global knowledge graph."""
+    engine = get_engine(db)
+    try:
+        from cortex.graph import process_fact_graph, GRAPH_BACKEND
+        
+        if GRAPH_BACKEND != "neo4j":
+            console.print("[yellow]WARNING: CORTEX_GRAPH_BACKEND is not set to 'neo4j'.[/]")
+            console.print("[dim]Migration will only re-process data into SQLite unless you set CORTEX_GRAPH_BACKEND=neo4j.[/]")
+            if not click.confirm("Do you want to continue?", default=False):
+                return
+
+        conn = engine._get_conn()
+        # Fetch all facts that don't have relationships yet (best effort)
+        # or just fetch all and let deduplication handle it.
+        facts = conn.execute("SELECT id, content, project, created_at FROM facts").fetchall()
+        
+        console.print(f"[bold blue]Migrating {len(facts)} facts to Graph Memory...[/]")
+        
+        processed = 0
+        with console.status("[bold blue]Processing...[/]") as status:
+            for fid, content, project, ts in facts:
+                try:
+                    process_fact_graph(conn, fid, content, project, ts)
+                    processed += 1
+                    if processed % 10 == 0:
+                        status.update(f"[bold blue]Processed {processed}/{len(facts)}...[/]")
+                except Exception as e:
+                    console.print(f"[red]✗ Failed at fact #{fid}: {e}[/]")
+
+        console.print(Panel(
+            f"[bold green]✓ Graph Migration Complete![/]\n"
+            f"Facts processed: {processed}\n"
+            f"Backend: {GRAPH_BACKEND}",
+            title="🧠 Graph Migration",
             border_style="green",
         ))
     finally:
@@ -817,10 +861,99 @@ def snapshot_list(db):
     console.print(table)
 
 
+# ─── Missions ────────────────────────────────────────────────────
+
+@cli.group()
+def mission():
+    """Orchestrate AI Swarm missions."""
+    pass
+
+
+@mission.command("launch")
+@click.argument("project")
+@click.argument("goal")
+@click.option("--formation", "-f", default="IRON_DOME", help="Swarm formation")
+@click.option("--agents", "-a", default=10, help="Number of agents")
+@click.option("--db", default=DEFAULT_DB, help="Database path")
+def mission_launch(project, goal, formation, agents, db):
+    """Launch a new swarm mission."""
+    engine = get_engine(db)
+    orchestrator = MissionOrchestrator(engine)
+    
+    try:
+        with console.status(f"[bold blue]Launching mission in {project}...[/]"):
+            result = orchestrator.launch(
+                project=project,
+                goal=goal,
+                formation=formation,
+                agents=agents
+            )
+            
+        if result["status"] == "success":
+            console.print(Panel(
+                f"[bold green]✓ Mission Launched Successfully[/]\n"
+                f"Intent ID: [cyan]#{result['intent_id']}[/]\n"
+                f"Result ID: [cyan]#{result['result_id']}[/]\n"
+                f"Status: {result['status'].upper()}",
+                title="🐝 Mission Control",
+                border_style="green",
+            ))
+            # Show snippet of output
+            console.print(f"\n[dim]Recent Output:[/]\n{result['stdout'][-500:]}")
+        else:
+            console.print(Panel(
+                f"[bold red]✗ Mission Failed[/]\n"
+                f"Intent ID: {result.get('intent_id', 'N/A')}\n"
+                f"Error: {result.get('error', 'Check stderr')}",
+                title="🐝 Mission Control",
+                border_style="red",
+            ))
+            if "stderr" in result:
+                console.print(f"\n[red]Stderr:[/]\n{result['stderr']}")
+                
+    finally:
+        engine.close()
+
+
+@mission.command("list")
+@click.option("--project", "-p", default=None, help="Filter by project")
+@click.option("--db", default=DEFAULT_DB, help="Database path")
+def mission_list(project, db):
+    """List recent swarm missions from the ledger."""
+    engine = get_engine(db)
+    orchestrator = MissionOrchestrator(engine)
+    try:
+        missions = orchestrator.list_missions(project=project)
+        
+        if not missions:
+            console.print("[yellow]No missions found in the ledger.[/]")
+            return
+            
+        table = Table(title="🐝 Swarm Mission History")
+        table.add_column("ID", style="bold", width=6)
+        table.add_column("Project", style="cyan", width=15)
+        table.add_column("Type", width=10)
+        table.add_column("Description", width=50)
+        table.add_column("Created At", width=20)
+        
+        for m in missions:
+            table.add_row(
+                str(m["id"]),
+                m["project"],
+                m["fact_type"],
+                m["content"][:50] + "...",
+                m["created_at"]
+            )
+        console.print(table)
+    finally:
+        engine.close()
+
+
 # ─── Registration ────────────────────────────────────────────────
 
 cli.add_command(ledger)
 cli.add_command(timeline)
+cli.add_command(mission)
 
 
 if __name__ == "__main__":

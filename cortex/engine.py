@@ -22,7 +22,7 @@ from cortex.exceptions import DatabaseTransactionError
 from cortex.schema import get_init_meta
 from cortex.migrations import run_migrations
 from cortex.search import SearchResult, semantic_search, text_search
-from cortex.graph import get_graph, query_entity
+from cortex.graph import get_graph # query_entity moved to method to break circularity
 from cortex.temporal import build_temporal_filter_params, now_iso
 
 logger = logging.getLogger("cortex")
@@ -44,8 +44,11 @@ class Fact:
     valid_until: Optional[str]
     source: Optional[str]
     meta: dict
+    created_at: str
+    updated_at: str
     consensus_score: float = 1.0
     tx_id: Optional[int] = None
+    hash: Optional[str] = None
 
     def is_active(self) -> bool:
         return self.valid_until is None
@@ -107,7 +110,7 @@ class CortexEngine:
             return self._conn
 
         self._conn = sqlite3.connect(
-            str(self._db_path), timeout=10, check_same_thread=False
+            str(self._db_path), timeout=30, check_same_thread=False
         )
 
         # Load sqlite-vec extension — handles both standard and restricted builds
@@ -379,6 +382,7 @@ class CortexEngine:
 
     def query_entity(self, name: str, project: Optional[str] = None) -> Optional[dict]:
         """Query specific entity in the graph."""
+        from cortex.graph import query_entity
         conn = self._get_conn()
         return query_entity(conn, name, project)
 
@@ -444,14 +448,16 @@ class CortexEngine:
         """
         conn = self._get_conn()
         query = """
-            SELECT id, project, content, fact_type, tags, confidence,
-                   valid_from, valid_until, source, meta, consensus_score
-            FROM facts
-            WHERE project = ? AND valid_until IS NULL
+            SELECT f.id, f.project, f.content, f.fact_type, f.tags, f.confidence,
+                   f.valid_from, f.valid_until, f.source, f.meta, f.consensus_score,
+                   f.created_at, f.updated_at, f.tx_id, t.hash
+            FROM facts f
+            LEFT JOIN transactions t ON f.tx_id = t.id
+            WHERE f.project = ? AND f.valid_until IS NULL
             ORDER BY 
-                (consensus_score * 0.8 + (1.0 / (1.0 + (julianday('now') - julianday(created_at)))) * 0.2) DESC,
-                fact_type, 
-                created_at DESC
+                (f.consensus_score * 0.8 + (1.0 / (1.0 + (julianday('now') - julianday(f.created_at)))) * 0.2) DESC,
+                f.fact_type, 
+                f.created_at DESC
         """
         params = [project]
         if limit:
@@ -663,13 +669,15 @@ class CortexEngine:
         conn = self._get_conn()
 
         if as_of:
-            clause, params = build_temporal_filter_params(as_of)
+            clause, params = build_temporal_filter_params(as_of, table_alias="f")
             query = """
-                SELECT id, project, content, fact_type, tags, confidence,
-                       valid_from, valid_until, source, meta
-                FROM facts
-                WHERE project = ? AND """ + clause + """
-                ORDER BY valid_from DESC
+                SELECT f.id, f.project, f.content, f.fact_type, f.tags, f.confidence,
+                       f.valid_from, f.valid_until, f.source, f.meta, f.consensus_score,
+                       f.created_at, f.updated_at, f.tx_id, t.hash
+                FROM facts f
+                LEFT JOIN transactions t ON f.tx_id = t.id
+                WHERE f.project = ? AND """ + clause + """
+                ORDER BY f.valid_from DESC
                 """
             # Combine params safely
             full_params = [project] + params
@@ -677,11 +685,13 @@ class CortexEngine:
         else:
             cursor = conn.execute(
                 """
-                SELECT id, project, content, fact_type, tags, confidence,
-                       valid_from, valid_until, source, meta
-                FROM facts
-                WHERE project = ?
-                ORDER BY valid_from DESC
+                SELECT f.id, f.project, f.content, f.fact_type, f.tags, f.confidence,
+                       f.valid_from, f.valid_until, f.source, f.meta, f.consensus_score,
+                       f.created_at, f.updated_at, f.tx_id, t.hash
+                FROM facts f
+                LEFT JOIN transactions t ON f.tx_id = t.id
+                WHERE f.project = ?
+                ORDER BY f.valid_from DESC
                 """,
                 (project,),
             )
@@ -821,9 +831,10 @@ class CortexEngine:
 
     def _row_to_fact(self, row: tuple) -> Fact:
         """Convert a database row to a Fact object.
-        
+
         Expected column order:
-        id, project, content, fact_type, tags, confidence, valid_from, valid_until, source, meta, consensus_score, [tx_id]
+        id, project, content, fact_type, tags, confidence, valid_from, valid_until, source, meta, consensus_score, 
+        created_at, updated_at, tx_id, hash
         """
         try:
             tags = json.loads(row[4]) if row[4] else []
@@ -847,7 +858,10 @@ class CortexEngine:
             source=row[8],
             meta=meta,
             consensus_score=row[10] if len(row) > 10 else 1.0,
-            tx_id=row[11] if len(row) > 11 else None,
+            created_at=row[11] if len(row) > 11 else "unknown",
+            updated_at=row[12] if len(row) > 12 else "unknown",
+            tx_id=row[13] if len(row) > 13 else None,
+            hash=row[14] if len(row) > 14 else None,
         )
 
     # ─── Wave 6: Temporal Navigation ──────────────────────────────
@@ -877,11 +891,13 @@ class CortexEngine:
         # - AND linked to tx_id <= target_tx_id (Precise check)
         
         query = """
-            SELECT id, project, content, fact_type, tags, confidence,
-                   valid_from, valid_until, source, meta, consensus_score, tx_id
-            FROM facts
-            WHERE (created_at <= ? AND (valid_until IS NULL OR valid_until > ?))
-              AND (tx_id IS NULL OR tx_id <= ?)
+            SELECT f.id, f.project, f.content, f.fact_type, f.tags, f.confidence,
+                   f.valid_from, f.valid_until, f.source, f.meta, f.consensus_score,
+                   f.created_at, f.updated_at, f.tx_id, t.hash
+            FROM facts f
+            LEFT JOIN transactions t ON f.tx_id = t.id
+            WHERE (f.created_at <= ? AND (f.valid_until IS NULL OR f.valid_until > ?))
+              AND (f.tx_id IS NULL OR f.tx_id <= ?)
         """
         params = [tx_time, tx_time, target_tx_id]
         

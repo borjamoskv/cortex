@@ -23,6 +23,7 @@ from cortex.engine import CortexEngine
 from cortex.timing import TimingTracker
 from cortex.config import DB_PATH, ALLOWED_ORIGINS, RATE_LIMIT, RATE_WINDOW
 from cortex.hive import router as hive_router
+from cortex.metrics import MetricsMiddleware, metrics
 from cortex import api_state
 
 # Import routers
@@ -35,6 +36,8 @@ from cortex.routes import (
     dashboard as dashboard_router,
     agents as agents_router,
     graph as graph_router,
+    ledger as ledger_router,
+    missions as missions_router,
 )
 
 logger = logging.getLogger("uvicorn.error")
@@ -133,6 +136,7 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 app.add_middleware(RateLimitMiddleware, limit=RATE_LIMIT, window=RATE_WINDOW)
+app.add_middleware(MetricsMiddleware)
 
 
 # ─── Dependencies ───────────────────────────────────────────────────
@@ -162,16 +166,19 @@ async def universal_error_handler(request: Request, exc: Exception) -> JSONRespo
 # ─── Routes ──────────────────────────────────────────────────────────
 
 @app.get("/", tags=["health"])
-async def root() -> dict:
+async def root_node() -> dict:
     return {"service": "cortex", "version": "4.0.0a1", "status": "operational"}
 
 @app.get("/health", tags=["health"])
-def health() -> dict:
-    try:
-        stats = api_state.engine.stats()
-        return {"status": "healthy", "facts": stats["total_facts"], "version": "4.0.0a1"}
-    except Exception:
-        return {"status": "unhealthy", "facts": 0, "version": "4.0.0a1"}
+async def health_check() -> dict:
+    """Simple status check for load balancers."""
+    return {"status": "healthy", "engine": "online", "version": "4.0.0a1"}
+
+@app.get("/metrics", tags=["health"])
+async def get_metrics():
+    """Expose Prometheus metrics."""
+    from fastapi.responses import Response
+    return Response(content=metrics.to_prometheus(), media_type="text/plain")
 
 # Include logical routers
 app.include_router(facts_router.router)
@@ -182,4 +189,6 @@ app.include_router(daemon_router.router)
 app.include_router(dashboard_router.router)
 app.include_router(agents_router.router)
 app.include_router(graph_router.router)
+app.include_router(ledger_router.router)
+app.include_router(missions_router.router)
 app.include_router(hive_router)

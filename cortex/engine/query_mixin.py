@@ -2,27 +2,26 @@
 from __future__ import annotations
 import json
 import logging
-import sqlite3
 from typing import Optional
 from cortex.engine.models import Fact
 from cortex.search import SearchResult, semantic_search, text_search
-from cortex.temporal import build_temporal_filter_params, now_iso
+from cortex.temporal import build_temporal_filter_params, now_iso, time_travel_filter
 
 logger = logging.getLogger("cortex")
 
 class QueryMixin:
-    def search(self, query: str, project: Optional[str] = None, top_k: int = 5, as_of: Optional[str] = None, **kwargs) -> list[SearchResult]:
+    async def search(self, query: str, project: Optional[str] = None, top_k: int = 5, as_of: Optional[str] = None, **kwargs) -> list[SearchResult]:
         if not query or not query.strip(): raise ValueError("query cannot be empty")
-        conn = self._get_conn()
+        conn = await self.get_conn()
         try:
-            results = semantic_search(conn, self._get_embedder().embed(query), top_k, project, as_of)
+            results = await semantic_search(conn, self._get_embedder().embed(query), top_k, project, as_of)
             if results: return results
         except Exception as e:
             logger.warning("Semantic search failed: %s", e)
-        return text_search(conn, query, project, limit=top_k, **kwargs)
+        return await text_search(conn, query, project, limit=top_k, **kwargs)
 
-    def recall(self, project: str, limit: Optional[int] = None, offset: int = 0) -> list[Fact]:
-        conn = self._get_conn()
+    async def recall(self, project: str, limit: Optional[int] = None, offset: int = 0) -> list[Fact]:
+        conn = await self.get_conn()
         query = """
             SELECT f.id, f.project, f.content, f.fact_type, f.tags, f.confidence,
                    f.valid_from, f.valid_until, f.source, f.meta, f.consensus_score,
@@ -34,50 +33,84 @@ class QueryMixin:
         params = [project]
         if limit: query += " LIMIT ?"; params.append(limit)
         if offset: query += " OFFSET ?"; params.append(offset)
-        cursor = conn.execute(query, params)
-        return [self._row_to_fact(row) for row in cursor.fetchall()]
+        cursor = await conn.execute(query, params)
+        rows = await cursor.fetchall()
+        return [self._row_to_fact(row) for row in rows]
 
-    def history(self, project: str, as_of: Optional[str] = None) -> list[Fact]:
-        conn = self._get_conn()
+    async def history(self, project: str, as_of: Optional[str] = None) -> list[Fact]:
+        conn = await self.get_conn()
         if as_of:
             clause, params = build_temporal_filter_params(as_of, table_alias="f")
             query = f"SELECT f.id, f.project, f.content, f.fact_type, f.tags, f.confidence, f.valid_from, f.valid_until, f.source, f.meta, f.consensus_score, f.created_at, f.updated_at, f.tx_id, t.hash FROM facts f LEFT JOIN transactions t ON f.tx_id = t.id WHERE f.project = ? AND {clause} ORDER BY f.valid_from DESC"
-            cursor = conn.execute(query, [project] + params)
+            cursor = await conn.execute(query, [project] + params)
         else:
-            cursor = conn.execute("SELECT f.id, f.project, f.content, f.fact_type, f.tags, f.confidence, f.valid_from, f.valid_until, f.source, f.meta, f.consensus_score, f.created_at, f.updated_at, f.tx_id, t.hash FROM facts f LEFT JOIN transactions t ON f.tx_id = t.id WHERE f.project = ? ORDER BY f.valid_from DESC", (project,))
-        return [self._row_to_fact(row) for row in cursor.fetchall()]
+            cursor = await conn.execute("SELECT f.id, f.project, f.content, f.fact_type, f.tags, f.confidence, f.valid_from, f.valid_until, f.source, f.meta, f.consensus_score, f.created_at, f.updated_at, f.tx_id, t.hash FROM facts f LEFT JOIN transactions t ON f.tx_id = t.id WHERE f.project = ? ORDER BY f.valid_from DESC", (project,))
+        rows = await cursor.fetchall()
+        return [self._row_to_fact(row) for row in rows]
 
-    def reconstruct_state(self, target_tx_id: int, project: Optional[str] = None) -> list[Fact]:
-        conn = self._get_conn()
-        tx = conn.execute("SELECT timestamp FROM transactions WHERE id = ?", (target_tx_id,)).fetchone()
+    async def reconstruct_state(self, target_tx_id: int, project: Optional[str] = None) -> list[Fact]:
+        conn = await self.get_conn()
+        cursor = await conn.execute("SELECT timestamp FROM transactions WHERE id = ?", (target_tx_id,))
+        tx = await cursor.fetchone()
         if not tx: raise ValueError(f"Transaction {target_tx_id} not found")
         tx_time = tx[0]
         query = "SELECT f.id, f.project, f.content, f.fact_type, f.tags, f.confidence, f.valid_from, f.valid_until, f.source, f.meta, f.consensus_score, f.created_at, f.updated_at, f.tx_id, t.hash FROM facts f LEFT JOIN transactions t ON f.tx_id = t.id WHERE (f.created_at <= ? AND (f.valid_until IS NULL OR f.valid_until > ?)) AND (f.tx_id IS NULL OR f.tx_id <= ?)"
         params = [tx_time, tx_time, target_tx_id]
         if project: query += " AND f.project = ?"; params.append(project)
         query += " ORDER BY f.id ASC"
-        cursor = conn.execute(query, params)
-        return [self._row_to_fact(row) for row in cursor.fetchall()]
+        cursor = await conn.execute(query, params)
+        rows = await cursor.fetchall()
+        return [self._row_to_fact(row) for row in rows]
 
-    def stats(self) -> dict:
-        conn = self._get_conn()
-        total = conn.execute("SELECT COUNT(*) FROM facts").fetchone()[0]
-        active = conn.execute(
+    async def time_travel(self, tx_id: int, project: str | None = None) -> list[Fact]:
+        """Reconstruct fact state at a historical transaction point.
+
+        More precise than ``reconstruct_state``: uses ``time_travel_filter``
+        which correlates ``tx_id`` ordering with ``valid_until`` timestamps
+        pulled from the transaction ledger.
+
+        Args:
+            tx_id: Transaction ID to travel to.
+            project: Optional project filter.
+
+        Returns:
+            List of facts that were active at that transaction.
+        """
+        conn = await self.get_conn()
+        clause, params = time_travel_filter(tx_id, table_alias="f")
+        query = (
+            "SELECT f.id, f.project, f.content, f.fact_type, f.tags, "
+            "f.confidence, f.valid_from, f.valid_until, f.source, f.meta, "
+            "f.consensus_score, f.created_at, f.updated_at, f.tx_id, t.hash "
+            "FROM facts f LEFT JOIN transactions t ON f.tx_id = t.id "
+            f"WHERE {clause}"
+        )
+        if project:
+            query += " AND f.project = ?"
+            params.append(project)
+        query += " ORDER BY f.id ASC"
+        cursor = await conn.execute(query, params)
+        rows = await cursor.fetchall()
+        return [self._row_to_fact(row) for row in rows]
+
+    async def stats(self) -> dict:
+        conn = await self.get_conn()
+        cursor = await conn.execute("SELECT COUNT(*) FROM facts")
+        total = (await cursor.fetchone())[0]
+        cursor = await conn.execute(
             "SELECT COUNT(*) FROM facts WHERE valid_until IS NULL"
-        ).fetchone()[0]
-        projects = [
-            p[0]
-            for p in conn.execute(
-                "SELECT DISTINCT project FROM facts WHERE valid_until IS NULL"
-            ).fetchall()
-        ]
-        types = {
-            t: c
-            for t, c in conn.execute(
-                "SELECT fact_type, COUNT(*) FROM facts WHERE valid_until IS NULL GROUP BY fact_type"
-            ).fetchall()
-        }
-        tx_count = conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0]
+        )
+        active = (await cursor.fetchone())[0]
+        cursor = await conn.execute(
+            "SELECT DISTINCT project FROM facts WHERE valid_until IS NULL"
+        )
+        projects = [p[0] for p in await cursor.fetchall()]
+        cursor = await conn.execute(
+            "SELECT fact_type, COUNT(*) FROM facts WHERE valid_until IS NULL GROUP BY fact_type"
+        )
+        types = {t: c for t, c in await cursor.fetchall()}
+        cursor = await conn.execute("SELECT COUNT(*) FROM transactions")
+        tx_count = (await cursor.fetchone())[0]
         
         db_size = (
             self._db_path.stat().st_size / (1024 * 1024)
@@ -86,7 +119,8 @@ class QueryMixin:
         )
 
         try:
-            embeddings = conn.execute("SELECT COUNT(*) FROM fact_embeddings").fetchone()[0]
+            cursor = await conn.execute("SELECT COUNT(*) FROM fact_embeddings")
+            embeddings = (await cursor.fetchone())[0]
         except Exception:
             embeddings = 0
 
@@ -103,12 +137,13 @@ class QueryMixin:
             "db_size_mb": round(db_size, 2),
         }
 
-    def graph(self, project: Optional[str] = None):
+    async def graph(self, project: Optional[str] = None):
         from cortex.graph import get_graph
+        conn = await self.get_conn()
+        return get_graph(conn, project)
 
-        return get_graph(self._get_conn(), project)
-
-    def query_entity(self, name: str, project: Optional[str] = None) -> list[dict]:
+    async def query_entity(self, name: str, project: Optional[str] = None) -> list[dict]:
         from cortex.graph import query_entity
+        conn = await self.get_conn()
+        return query_entity(conn, name, project)
 
-        return query_entity(self._get_conn(), name, project)

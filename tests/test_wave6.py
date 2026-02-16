@@ -10,8 +10,8 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 
 from cortex.engine import CortexEngine
-from cortex.snapshots import SnapshotManager
-from cortex.ledger import ImmutableLedger
+from cortex.engine.snapshots import SnapshotManager
+from cortex.engine.ledger import ImmutableLedger
 
 def test_wave6():
     db_path = "test_wave6.db"

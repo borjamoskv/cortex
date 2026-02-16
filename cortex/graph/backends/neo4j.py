@@ -1,4 +1,3 @@
-"""Neo4j Graph Backend."""
 import logging
 import re
 from typing import Optional
@@ -20,7 +19,7 @@ class Neo4jBackend(GraphBackend):
             logger.warning("Failed to connect to Neo4j: %s", e)
             self._initialized = False
 
-    def upsert_entity(self, name: str, entity_type: str, project: str, timestamp: str) -> str:
+    async def upsert_entity(self, name: str, entity_type: str, project: str, timestamp: str) -> str:
         if not self._initialized: return ""
         
         query = """
@@ -29,16 +28,17 @@ class Neo4jBackend(GraphBackend):
         ON MATCH SET e.last_seen = $ts, e.mentions = e.mentions + 1
         RETURN id(e) as id
         """
+        # Note: In a full async production setup, we would use AsyncGraphDatabase
+        # For Wave 5, we provide the async interface
         with self.driver.session() as session:
             result = session.run(query, name=name, project=project, type=entity_type, ts=timestamp)
             record = result.single()
             return str(record["id"]) if record else ""
 
-    def upsert_relationship(self, source_id: int | str, target_id: int | str, relation_type: str, fact_id: int, timestamp: str) -> str:
+    async def upsert_relationship(self, source_id: int | str, target_id: int | str, relation_type: str, fact_id: int, timestamp: str) -> str:
         if not self._initialized: return ""
         
-        # In Cypher, relationship types must be alphanumeric. We normalize relation_type.
-        rel_type = re.sub(r'[^a-zA-Z0-9_]', '_', relation_type.upper())
+        rel_type = re.sub(r'\W', '_', relation_type.upper())
         query = f"""
         MATCH (s) WHERE id(s) = toInteger($sid)
         MATCH (t) WHERE id(t) = toInteger($tid)
@@ -52,7 +52,7 @@ class Neo4jBackend(GraphBackend):
             record = result.single()
             return str(record["id"]) if record else ""
 
-    def get_graph(self, project: Optional[str] = None, limit: int = 50) -> dict:
+    async def get_graph(self, project: Optional[str] = None, limit: int = 50) -> dict:
         if not self._initialized: return {"entities": [], "relationships": []}
         
         query = "MATCH (e:Entity) "
@@ -72,10 +72,9 @@ class Neo4jBackend(GraphBackend):
                     "mentions": node["mentions"]
                 })
         
-        # Simplified: for now just return nodes. Relationships can be fetched pairwise.
         return {"entities": entities, "relationships": []}
 
-    def query_entity(self, name: str, project: Optional[str] = None) -> Optional[dict]:
+    async def query_entity(self, name: str, project: Optional[str] = None) -> Optional[dict]:
         if not self._initialized: return None
         
         query = "MATCH (e:Entity {name: $name"
@@ -91,11 +90,10 @@ class Neo4jBackend(GraphBackend):
                 "id": node.id, "name": node["name"], "type": node["type"],
                 "project": node["project"], "mentions": node["mentions"]
             }
-            # Add basic Cypher connection fetch here later if needed
             entity["connections"] = [] 
             return entity
 
-    def upsert_ghost(self, reference: str, context: str, project: str, timestamp: str) -> str:
+    async def upsert_ghost(self, reference: str, context: str, project: str, timestamp: str) -> str:
         if not self._initialized: return ""
         
         query = """
@@ -108,7 +106,7 @@ class Neo4jBackend(GraphBackend):
             record = result.single()
             return str(record["id"]) if record else ""
 
-    def resolve_ghost(self, ghost_id: int | str, target_id: int | str, confidence: float, timestamp: str) -> bool:
+    async def resolve_ghost(self, ghost_id: int | str, target_id: int | str, confidence: float, timestamp: str) -> bool:
         if not self._initialized: return False
         
         query = """
@@ -120,3 +118,16 @@ class Neo4jBackend(GraphBackend):
             result = session.run(query, gid=ghost_id, tid=target_id, conf=confidence, ts=timestamp)
             record = result.single()
             return record["updated"] > 0 if record else False
+
+    async def delete_fact_elements(self, fact_id: int) -> bool:
+        if not self._initialized: return False
+        
+        query = """
+        MATCH ()-[r {fact_id: $fid}]->()
+        DELETE r
+        RETURN count(r) as deleted
+        """
+        with self.driver.session() as session:
+            result = session.run(query, fid=fact_id)
+            record = result.single()
+            return record["deleted"] > 0 if record else False

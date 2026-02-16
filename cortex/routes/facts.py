@@ -1,19 +1,19 @@
 """
-CORTEX v4.0 — Facts Router.
+CORTEX v4.0 - Facts Router.
 Modularized fact operations: store, recall, deprecate, vote.
 """
 
 import logging
 from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, HTTPException
-from starlette.concurrency import run_in_threadpool
 
 from cortex.auth import AuthResult, require_permission
 from cortex.models import (
-    StoreRequest, StoreResponse, FactResponse, 
+    StoreRequest, StoreResponse, FactResponse,
     VoteRequest, VoteResponse, VoteV2Request
 )
 from cortex.api_deps import get_engine
+from cortex.engine import CortexEngine
 
 logger = logging.getLogger("cortex.api.facts")
 router = APIRouter(tags=["facts"])
@@ -26,8 +26,7 @@ async def store_fact(
     engine: CortexEngine = Depends(get_engine),
 ) -> StoreResponse:
     """Store a fact with automatic tenant isolation."""
-    fact_id = await run_in_threadpool(
-        engine.store,
+    fact_id = await engine.store(
         project=auth.tenant_id,
         content=req.content,
         fact_type=req.fact_type,
@@ -52,8 +51,8 @@ async def recall_project(
     if project != auth.tenant_id:
         raise HTTPException(status_code=403, detail="Forbidden: Namespace mismatch")
 
-    facts = await run_in_threadpool(engine.recall, project=project, limit=limit)
-    
+    facts = await engine.recall(project=project, limit=limit)
+
     return [
         FactResponse(
             id=f.id,
@@ -84,32 +83,27 @@ async def cast_vote(
 ) -> VoteResponse:
     """Cast a consensus vote (verify/dispute) on a fact."""
     try:
-        # Ownership check
-        def _check_owner():
-            with engine._get_conn() as conn:
-                row = conn.execute("SELECT project FROM facts WHERE id = ?", (fact_id,)).fetchone()
-                return row[0] if row else None
-        
-        project = await run_in_threadpool(_check_owner)
+        conn = await engine.get_conn()
+        cursor = await conn.execute(
+            "SELECT project FROM facts WHERE id = ?", (fact_id,)
+        )
+        row = await cursor.fetchone()
+        project = row[0] if row else None
+
         if not project:
             raise HTTPException(status_code=404, detail=f"Fact #{fact_id} not found")
         if project != auth.tenant_id:
             raise HTTPException(status_code=403, detail="Forbidden: Fact belongs to another tenant")
 
-        # Use auth identity for voting
         agent_id = auth.key_name or "api_agent"
-        
-        # Cast vote (req.value is 1, -1, or 0)
-        score = await run_in_threadpool(engine.vote, fact_id, agent_id, req.value)
-        
-        # Get updated confidence for the response
-        def _fetch_fact_status():
-            with engine._get_conn() as conn:
-                row = conn.execute("SELECT confidence FROM facts WHERE id = ?", (fact_id,)).fetchone()
-                return row[0] if row else "unknown"
-        
-        confidence = await run_in_threadpool(_fetch_fact_status)
-        
+        score = await engine.vote(fact_id, agent_id, req.value)
+
+        cursor = await conn.execute(
+            "SELECT confidence FROM facts WHERE id = ?", (fact_id,)
+        )
+        row = await cursor.fetchone()
+        confidence = row[0] if row else "unknown"
+
         return VoteResponse(
             fact_id=fact_id,
             agent=agent_id,
@@ -124,6 +118,8 @@ async def cast_vote(
     except Exception as e:
         logger.exception("Unexpected error during voting for fact #%d", fact_id)
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
 @router.post("/v1/facts/{fact_id}/vote-v2", response_model=VoteResponse)
 async def cast_vote_v2(
     fact_id: int,
@@ -133,34 +129,30 @@ async def cast_vote_v2(
 ) -> VoteResponse:
     """Cast a reputation-weighted consensus vote (RWC)."""
     try:
-        # Ownership check
-        def _check_owner():
-            with engine._get_conn() as conn:
-                row = conn.execute("SELECT project FROM facts WHERE id = ?", (fact_id,)).fetchone()
-                return row[0] if row else None
+        conn = await engine.get_conn()
+        cursor = await conn.execute(
+            "SELECT project FROM facts WHERE id = ?", (fact_id,)
+        )
+        row = await cursor.fetchone()
+        project = row[0] if row else None
 
-        project = await run_in_threadpool(_check_owner)
         if not project:
             raise HTTPException(status_code=404, detail=f"Fact #{fact_id} not found")
         if project != auth.tenant_id:
             raise HTTPException(status_code=403, detail="Forbidden: Fact belongs to another tenant")
 
-        # Cast RWC vote
-        score = await run_in_threadpool(
-            engine.vote, 
-            fact_id=fact_id, 
-            agent=auth.key_name or "api_agent", 
-            value=req.vote, 
-            agent_id=req.agent_id
+        score = await engine.vote(
+            fact_id=fact_id,
+            agent=auth.key_name or "api_agent",
+            value=req.vote,
+            agent_id=req.agent_id,
         )
 
-        # Get updated confidence for the response
-        def _fetch_fact_status():
-            with engine._get_conn() as conn:
-                row = conn.execute("SELECT confidence FROM facts WHERE id = ?", (fact_id,)).fetchone()
-                return row[0] if row else "unknown"
-
-        confidence = await run_in_threadpool(_fetch_fact_status)
+        cursor = await conn.execute(
+            "SELECT confidence FROM facts WHERE id = ?", (fact_id,)
+        )
+        row = await cursor.fetchone()
+        confidence = row[0] if row else "unknown"
 
         return VoteResponse(
             fact_id=fact_id,
@@ -185,54 +177,47 @@ async def get_votes(
     engine: CortexEngine = Depends(get_engine),
 ) -> List[dict]:
     """Retrieve all votes for a specific fact (Tenant Isolated)."""
-    # Ownership check
-    def _check_owner():
-        with engine._get_conn() as conn:
-            row = conn.execute("SELECT project FROM facts WHERE id = ?", (fact_id,)).fetchone()
-            return row[0] if row else None
+    conn = await engine.get_conn()
+    cursor = await conn.execute(
+        "SELECT project FROM facts WHERE id = ?", (fact_id,)
+    )
+    row = await cursor.fetchone()
+    project = row[0] if row else None
 
-    project = await run_in_threadpool(_check_owner)
     if not project:
         raise HTTPException(status_code=404, detail=f"Fact #{fact_id} not found")
     if project != auth.tenant_id:
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    def _get_votes():
-        with engine._get_conn() as conn:
-            # Combined query for legacy and v2 votes
-            v2_votes = conn.execute(
-                """
-                SELECT 'v2' as type, v.vote, v.agent_id as agent, v.created_at, a.reputation_score
-                FROM consensus_votes_v2 v
-                JOIN agents a ON v.agent_id = a.id
-                WHERE v.fact_id = ?
-                """,
-                (fact_id,)
-            ).fetchall()
-            
-            legacy_votes = conn.execute(
-                """
-                SELECT 'legacy' as type, vote, agent, timestamp as created_at, 0.0 as reputation_score
-                FROM consensus_votes
-                WHERE fact_id = ?
-                """,
-                (fact_id,)
-            ).fetchall()
-            
-            return [
-                {
-                    "type": r[0],
-                    "vote": r[1],
-                    "agent": r[2],
-                    "timestamp": r[3],
-                    "reputation": r[4]
-                }
-                for r in (v2_votes + legacy_votes)
-            ]
+    # V2 votes
+    cursor = await conn.execute(
+        """SELECT 'v2' as type, v.vote, v.agent_id as agent, v.created_at, a.reputation_score
+           FROM consensus_votes_v2 v
+           JOIN agents a ON v.agent_id = a.id
+           WHERE v.fact_id = ?""",
+        (fact_id,),
+    )
+    v2_votes = await cursor.fetchall()
 
-    votes = await run_in_threadpool(_get_votes)
-    return votes
+    # Legacy votes
+    cursor = await conn.execute(
+        """SELECT 'legacy' as type, vote, agent, timestamp as created_at, 0.0 as reputation_score
+           FROM consensus_votes
+           WHERE fact_id = ?""",
+        (fact_id,),
+    )
+    legacy_votes = await cursor.fetchall()
 
+    return [
+        {
+            "type": r[0],
+            "vote": r[1],
+            "agent": r[2],
+            "timestamp": r[3],
+            "reputation": r[4],
+        }
+        for r in (v2_votes + legacy_votes)
+    ]
 
 
 @router.delete("/v1/facts/{fact_id}")
@@ -242,20 +227,20 @@ async def deprecate_fact(
     engine: CortexEngine = Depends(get_engine),
 ) -> dict:
     """Soft-deprecate a fact (mark as invalid)."""
-    # Ownership check
-    def _check_owner():
-        with engine._get_conn() as conn:
-            row = conn.execute("SELECT project FROM facts WHERE id = ?", (fact_id,)).fetchone()
-            return row[0] if row else None
-    
-    project = await run_in_threadpool(_check_owner)
+    conn = await engine.get_conn()
+    cursor = await conn.execute(
+        "SELECT project FROM facts WHERE id = ?", (fact_id,)
+    )
+    row = await cursor.fetchone()
+    project = row[0] if row else None
+
     if not project:
         raise HTTPException(status_code=404, detail=f"Fact #{fact_id} not found")
     if project != auth.tenant_id:
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    success = await run_in_threadpool(engine.deprecate, fact_id, project)
+    success = await engine.deprecate(fact_id, project)
     if not success:
         raise HTTPException(status_code=500, detail="Deprecation failed")
-    
+
     return {"message": f"Fact #{fact_id} deprecated", "success": True}

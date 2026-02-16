@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger("cortex.sync")
 
 
-def export_snapshot(engine: CortexEngine, out_path: Path | None = None) -> Path:
+async def export_snapshot(engine: CortexEngine, out_path: Path | None = None) -> Path:
     """Exporta un snapshot legible de toda la memoria activa de CORTEX.
 
     Genera un archivo markdown que el agente IA puede leer al inicio
@@ -31,12 +31,13 @@ def export_snapshot(engine: CortexEngine, out_path: Path | None = None) -> Path:
     if out_path is None:
         out_path = CORTEX_DIR / "context-snapshot.md"
 
-    conn = engine._get_conn()
-    rows = conn.execute(
+    conn = await engine.get_conn()
+    async with conn.execute(
         "SELECT project, content, fact_type, tags, confidence "
         "FROM facts WHERE valid_until IS NULL "
         "ORDER BY project, fact_type, id"
-    ).fetchall()
+    ) as cursor:
+        rows = await cursor.fetchall()
 
     # Agrupar por proyecto
     by_project: dict[str, list] = {}
@@ -57,7 +58,7 @@ def export_snapshot(engine: CortexEngine, out_path: Path | None = None) -> Path:
         "",
     ]
 
-    stats = engine.stats()
+    stats = await engine.stats()
     db_path = engine._db_path
     db_size_mb = db_path.stat().st_size / (1024 * 1024) if db_path.exists() else 0.0
 

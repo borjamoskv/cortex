@@ -1,5 +1,5 @@
 """
-CORTEX v4.0 — Ledger Router.
+CORTEX v4.0 - Ledger Router.
 Cryptographic integrity verification and checkpointing.
 """
 
@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from starlette.concurrency import run_in_threadpool
 
 from cortex.auth import AuthResult, require_permission
-from cortex.ledger import ImmutableLedger
+from cortex.engine.ledger import ImmutableLedger
 from cortex.models import LedgerReportResponse, CheckpointResponse
 from cortex.engine import CortexEngine
 from cortex.api_deps import get_engine
@@ -16,12 +16,11 @@ from cortex.api_deps import get_engine
 
 class LedgerError(Exception):
     """Base exception for ledger operations."""
-    pass
 
 
 class MerkleIntegrityError(LedgerError):
     """Raised when Merkle verification fails."""
-    pass
+
 
 logger = logging.getLogger("cortex.api.ledger")
 router = APIRouter(prefix="/v1/ledger", tags=["ledger"])
@@ -34,20 +33,12 @@ async def get_ledger_status(
 ) -> LedgerReportResponse:
     """Check the cryptographic integrity of the entire ledger."""
     try:
-        def _verify():
-            with engine.get_connection() as conn:
-                ledger = ImmutableLedger(conn)
-                report = ledger.verify_integrity()
-                if not report["valid"]:
-                    raise MerkleIntegrityError(f"Ledger violation: {report['violations']}")
-                return report
-        
-        report = await run_in_threadpool(_verify)
+        report = await engine.verify_ledger()
+        if not report.get("valid", True):
+            raise MerkleIntegrityError(f"Ledger violation: {report.get('violations', [])}")
         return LedgerReportResponse(**report)
     except MerkleIntegrityError as e:
         logger.error("Ledger integrity violation: %s", e)
-        # We still return the report so the user can see violations, but we log as ERROR
-        # Actually, let's keep it consistent with the model.
         raise HTTPException(status_code=409, detail=f"Ledger integrity violation: {str(e)}")
     except Exception as e:
         logger.exception("Ledger integrity check failed")
@@ -61,13 +52,10 @@ async def create_checkpoint(
 ) -> CheckpointResponse:
     """Manually trigger a Merkle root checkpoint for recent transactions."""
     try:
-        def _checkpoint():
-            with engine.get_connection() as conn:
-                ledger = ImmutableLedger(conn)
-                return ledger.create_merkle_checkpoint()
-        
-        cp_id = await run_in_threadpool(_checkpoint)
-        
+        conn = await engine.get_conn()
+        ledger = ImmutableLedger(conn)
+        cp_id = await ledger.create_checkpoint_async()
+
         if cp_id:
             return CheckpointResponse(
                 checkpoint_id=cp_id,
@@ -89,5 +77,5 @@ async def verify_ledger(
     auth: AuthResult = Depends(require_permission("admin")),
     engine: CortexEngine = Depends(get_engine),
 ) -> LedgerReportResponse:
-    """Alias for /status — performs full integrity verification."""
+    """Alias for /status - performs full integrity verification."""
     return await get_ledger_status(auth, engine)

@@ -1,9 +1,8 @@
 """
-CORTEX v4.0 — Search Router.
+CORTEX v4.0 - Search Router.
 """
 
 from fastapi import APIRouter, Depends, Query
-from starlette.concurrency import run_in_threadpool
 from cortex.auth import AuthResult, require_permission
 from cortex.models import SearchRequest, SearchResult
 from cortex.api_deps import get_engine
@@ -18,12 +17,11 @@ async def search_facts(
     engine: CortexEngine = Depends(get_engine),
 ) -> list[SearchResult]:
     """Semantic search across all facts."""
-    results = await run_in_threadpool(
-        engine.search, 
-        req.query, 
-        top_k=req.k, 
+    results = await engine.search(
+        req.query,
+        top_k=req.k,
         project=req.project,
-        as_of=req.as_of
+        as_of=req.as_of,
     )
     return [
         SearchResult(
@@ -51,12 +49,11 @@ async def search_facts_get(
     engine: CortexEngine = Depends(get_engine),
 ) -> list[SearchResult]:
     """Semantic search (GET) for frontend convenience."""
-    results = await run_in_threadpool(
-        engine.search, 
-        query, 
-        top_k=limit, 
+    results = await engine.search(
+        query,
+        top_k=limit,
         project=project,
-        as_of=as_of
+        as_of=as_of,
     )
     return [
         SearchResult(

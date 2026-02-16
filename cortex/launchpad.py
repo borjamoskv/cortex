@@ -71,18 +71,31 @@ class MissionOrchestrator:
         if context:
             cmd.extend(["--context", context])
 
-        # 3. Execute (Async-ish for now, but blocking in CLI)
+        # 3. Execute via SovereignGate (L3 interception)
         try:
+            from cortex.sovereign_gate import get_gate, ActionLevel, GateNotApproved, GateExpired
+
             logger.info(f"Executing swarm mission: {' '.join(cmd)}")
             
+            gate = get_gate()
+            action = gate.request_approval(
+                level=ActionLevel.L3_EXECUTE,
+                description=f"Launch swarm mission: {display_goal}",
+                command=cmd,
+                project=project,
+                context={"formation": formation, "agents": agents},
+            )
+            gate.approve_interactive(action.action_id)
+
             # Close connection to avoid locking if subprocess tries to write to the same DB
             self.engine.close()
-            
-            result = subprocess.run(
-                cmd, 
-                capture_output=True, 
-                text=True, 
-                check=False
+
+            result = gate.execute_subprocess(
+                action.action_id,
+                cmd,
+                capture_output=True,
+                text=True,
+                check=False,
             )
             
             output = result.stdout

@@ -1,15 +1,8 @@
-"""
-CORTEX v4.0 — Snapshot Management.
-
-Handles creating, listing, and restoring full database snapshots.
-Leverages SQLite's VACUUM INTO for consistent physical backups.
-"""
-
 import json
 import logging
 import os
 import shutil
-import sqlite3
+import aiosqlite
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -39,7 +32,7 @@ class SnapshotManager:
         self.snapshot_dir = self.db_path.parent / "snapshots"
         self.snapshot_dir.mkdir(parents=True, exist_ok=True)
 
-    def create_snapshot(self, name: str, tx_id: int, merkle_root: str) -> SnapshotRecord:
+    async def create_snapshot(self, name: str, tx_id: int, merkle_root: str) -> SnapshotRecord:
         """Create a consistent physical snapshot of the current database.
         
         Args:
@@ -55,20 +48,20 @@ class SnapshotManager:
         dest_path = self.snapshot_dir / filename
         
         # Use VACUUM INTO for a consistent backup of a live database in WAL mode
-        conn = sqlite3.connect(str(self.db_path))
-        try:
-            # We must escape the path for the SQL statement
-            # SQLite doesn't support parameters for VACUUM INTO
-            safe_path = str(dest_path).replace("'", "''")
-            conn.execute(f"VACUUM INTO '{safe_path}'")
-            logger.info("Snapshot created via VACUUM INTO: %s", dest_path)
-        finally:
-            conn.close()
+        async with aiosqlite.connect(str(self.db_path)) as conn:
+            try:
+                # We must escape the path for the SQL statement
+                # SQLite doesn't support parameters for VACUUM INTO
+                safe_path = str(dest_path).replace("'", "''")
+                await conn.execute(f"VACUUM INTO '{safe_path}'")
+                logger.info("Snapshot created via VACUUM INTO: %s", dest_path)
+            except Exception as e:
+                logger.error("Snapshot creation failed: %s", e)
+                raise
             
         size_mb = round(dest_path.stat().st_size / (1024 * 1024), 2)
         
-        # We record the metadata in a alongside JSON file or a dedicated table?
-        # Let's use a JSON sidecar for maximum portability (independent of the main DB)
+        # We record the metadata in a alongside JSON file
         meta_path = dest_path.with_suffix(".json")
         record = {
             "name": name,
@@ -79,11 +72,12 @@ class SnapshotManager:
             "path": str(dest_path)
         }
         
+        # Using standard open since it's just a small JSON meta-file
         with open(meta_path, "w") as f:
             json.dump(record, f, indent=2)
             
         return SnapshotRecord(
-            id=0, # Temporary
+            id=0, # Metadata ID
             name=name,
             path=str(dest_path),
             tx_id=tx_id,
@@ -92,11 +86,12 @@ class SnapshotManager:
             size_mb=size_mb
         )
 
-    def list_snapshots(self) -> List[SnapshotRecord]:
+    async def list_snapshots(self) -> List[SnapshotRecord]:
         """List all available snapshots in the snapshot directory."""
         snapshots = []
         for meta_file in self.snapshot_dir.glob("*.json"):
             try:
+                # small files, sync is okay
                 with open(meta_file, "r") as f:
                     data = json.load(f)
                     # Check if the DB file actually exists
@@ -116,12 +111,13 @@ class SnapshotManager:
                 
         return sorted(snapshots, key=lambda s: s.created_at, reverse=True)
 
-    def restore_snapshot(self, tx_id: int) -> bool:
+    async def restore_snapshot(self, tx_id: int) -> bool:
         """Restore the database to a specific snapshot state.
         
         WARNING: This overwrites the current database.
         """
-        snapshots = [s for s in self.list_snapshots() if s.tx_id == tx_id]
+        all_snapshots = await self.list_snapshots()
+        snapshots = [s for s in all_snapshots if s.tx_id == tx_id]
         if not snapshots:
             logger.error("No snapshot found for TX %d", tx_id)
             return False

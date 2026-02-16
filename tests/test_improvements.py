@@ -15,6 +15,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+import pytest_asyncio
 
 from cortex.engine import CortexEngine, Fact
 from cortex.export import export_facts
@@ -27,23 +28,24 @@ from cortex.migrations import (
 import sqlite_vec
 
 
-@pytest.fixture
-def engine(tmp_path):
+@pytest_asyncio.fixture
+async def engine(tmp_path):
     """Create a fresh engine for each test."""
     db = tmp_path / "test.db"
     eng = CortexEngine(str(db), auto_embed=False)
-    eng.init_db()
-    return eng
+    await eng.init_db()
+    yield eng
+    await eng.close()
 
 
-@pytest.fixture
-def populated_engine(engine):
+@pytest_asyncio.fixture
+async def populated_engine(engine):
     """Engine with some test facts."""
-    engine.store("proj-a", "Python is great", fact_type="knowledge", tags=["python", "lang"])
-    engine.store("proj-a", "TypeScript is typed", fact_type="knowledge", tags=["typescript", "lang"])
-    engine.store("proj-a", "Use pytest for testing", fact_type="decision", tags=["python", "testing"])
-    engine.store("proj-b", "Deploy on Fridays is risky", fact_type="mistake", tags=["deploy", "ops"])
-    engine.store("proj-b", "WAL mode is faster", fact_type="knowledge", tags=["sqlite", "perf"])
+    await engine.store("proj-a", "Python is great", fact_type="knowledge", tags=["python", "lang"])
+    await engine.store("proj-a", "TypeScript is typed", fact_type="knowledge", tags=["typescript", "lang"])
+    await engine.store("proj-a", "Use pytest for testing", fact_type="decision", tags=["python", "testing"])
+    await engine.store("proj-b", "Deploy on Fridays is risky", fact_type="mistake", tags=["deploy", "ops"])
+    await engine.store("proj-b", "WAL mode is faster", fact_type="knowledge", tags=["sqlite", "perf"])
     return engine
 
 
@@ -51,30 +53,35 @@ def populated_engine(engine):
 
 
 class TestStoreMany:
-    def test_batch_store_returns_ids(self, engine):
+    @pytest.mark.asyncio
+    async def test_batch_store_returns_ids(self, engine):
         facts = [
             {"project": "p1", "content": "Fact one"},
             {"project": "p1", "content": "Fact two"},
             {"project": "p1", "content": "Fact three"},
         ]
-        ids = engine.store_many(facts)
+        ids = await engine.store_many(facts)
         assert len(ids) == 3
         assert all(isinstance(i, int) for i in ids)
         assert len(set(ids)) == 3  # All unique
 
-    def test_batch_store_empty_raises(self, engine):
+    @pytest.mark.asyncio
+    async def test_batch_store_empty_raises(self, engine):
         with pytest.raises(ValueError, match="empty"):
-            engine.store_many([])
+            await engine.store_many([])
 
-    def test_batch_store_missing_project_raises(self, engine):
+    @pytest.mark.asyncio
+    async def test_batch_store_missing_project_raises(self, engine):
         with pytest.raises(ValueError, match="project"):
-            engine.store_many([{"content": "no project"}])
+            await engine.store_many([{"content": "no project"}])
 
-    def test_batch_store_missing_content_raises(self, engine):
+    @pytest.mark.asyncio
+    async def test_batch_store_missing_content_raises(self, engine):
         with pytest.raises(ValueError, match="content"):
-            engine.store_many([{"project": "p"}])
+            await engine.store_many([{"project": "p"}])
 
-    def test_batch_store_with_optional_fields(self, engine):
+    @pytest.mark.asyncio
+    async def test_batch_store_with_optional_fields(self, engine):
         facts = [
             {
                 "project": "p1",
@@ -85,25 +92,27 @@ class TestStoreMany:
                 "meta": {"key": "value"},
             }
         ]
-        ids = engine.store_many(facts)
+        ids = await engine.store_many(facts)
         assert len(ids) == 1
-        recalled = engine.recall("p1")
+        recalled = await engine.recall("p1")
         assert len(recalled) == 1
         assert recalled[0].fact_type == "decision"
         assert "important" in recalled[0].tags
 
-    def test_batch_store_is_atomic(self, engine):
+    @pytest.mark.asyncio
+    async def test_batch_store_is_atomic(self, engine):
         """All facts should be visible after batch store."""
         facts = [
             {"project": "batch", "content": f"Fact {i}"}
             for i in range(10)
         ]
-        ids = engine.store_many(facts)
+        ids = await engine.store_many(facts)
         assert len(ids) == 10
-        recalled = engine.recall("batch")
+        recalled = await engine.recall("batch")
         assert len(recalled) == 10
 
-    def test_batch_store_rollback_on_validation_error(self, engine):
+    @pytest.mark.asyncio
+    async def test_batch_store_rollback_on_validation_error(self, engine):
         """Insert 2 valid facts then 1 invalid (empty project) mid-batch.
 
         Verifies that the ValueError inside the `with conn:` block triggers
@@ -117,15 +126,15 @@ class TestStoreMany:
         ]
 
         with pytest.raises(ValueError, match="project"):
-            engine.store_many(facts)
+            await engine.store_many(facts)
 
         # Critical assertion: zero facts should persist after rollback
-        recalled = engine.recall("rollback_test")
+        recalled = await engine.recall("rollback_test")
         assert len(recalled) == 0, (
             f"Expected 0 facts after rollback, got {len(recalled)}"
         )
 
-    def test_database_transaction_error_exists(self, engine):
+    def test_database_transaction_error_exists(self):
         """Verify DatabaseTransactionError is importable and properly typed."""
         from cortex.exceptions import DatabaseTransactionError, CortexError
 
@@ -140,53 +149,60 @@ class TestStoreMany:
 
 
 class TestUpdate:
-    def test_update_content(self, engine):
-        original_id = engine.store("p1", "Original content")
-        new_id = engine.update(original_id, content="Updated content")
+    @pytest.mark.asyncio
+    async def test_update_content(self, engine):
+        original_id = await engine.store("p1", "Original content")
+        new_id = await engine.update(original_id, content="Updated content")
         assert new_id != original_id
 
-        facts = engine.recall("p1")
+        facts = await engine.recall("p1")
         assert len(facts) == 1
         assert facts[0].content == "Updated content"
         assert facts[0].id == new_id
 
-    def test_update_tags(self, engine):
-        original_id = engine.store("p1", "Some fact", tags=["old"])
-        new_id = engine.update(original_id, tags=["new", "shiny"])
+    @pytest.mark.asyncio
+    async def test_update_tags(self, engine):
+        original_id = await engine.store("p1", "Some fact", tags=["old"])
+        new_id = await engine.update(original_id, tags=["new", "shiny"])
 
-        facts = engine.recall("p1")
+        facts = await engine.recall("p1")
         assert facts[0].tags == ["new", "shiny"]
 
-    def test_update_preserves_history(self, engine):
-        original_id = engine.store("p1", "V1")
-        engine.update(original_id, content="V2")
+    @pytest.mark.asyncio
+    async def test_update_preserves_history(self, engine):
+        original_id = await engine.store("p1", "V1")
+        await engine.update(original_id, content="V2")
 
         # History should have both versions
-        history = engine.history("p1")
+        history = await engine.history("p1")
         assert len(history) >= 2
 
-    def test_update_preserves_meta_lineage(self, engine):
-        original_id = engine.store("p1", "Original", meta={"source": "test"})
-        new_id = engine.update(original_id, content="Updated")
+    @pytest.mark.asyncio
+    async def test_update_preserves_meta_lineage(self, engine):
+        original_id = await engine.store("p1", "Original", meta={"source": "test"})
+        new_id = await engine.update(original_id, content="Updated")
 
-        facts = engine.recall("p1")
+        facts = await engine.recall("p1")
         assert facts[0].meta.get("previous_fact_id") == original_id
 
-    def test_update_invalid_id_raises(self, engine):
+    @pytest.mark.asyncio
+    async def test_update_invalid_id_raises(self, engine):
         with pytest.raises(ValueError):
-            engine.update(0)
+            await engine.update(0)
 
-    def test_update_nonexistent_raises(self, engine):
+    @pytest.mark.asyncio
+    async def test_update_nonexistent_raises(self, engine):
         with pytest.raises(ValueError, match="not found"):
-            engine.update(9999)
+            await engine.update(9999)
 
-    def test_update_keeps_unchanged_fields(self, engine):
-        original_id = engine.store(
+    @pytest.mark.asyncio
+    async def test_update_keeps_unchanged_fields(self, engine):
+        original_id = await engine.store(
             "p1", "Content", fact_type="decision", tags=["tag1"], source="test",
         )
-        new_id = engine.update(original_id, tags=["tag2"])
+        new_id = await engine.update(original_id, tags=["tag2"])
 
-        facts = engine.recall("p1")
+        facts = await engine.recall("p1")
         assert facts[0].content == "Content"
         assert facts[0].fact_type == "decision"
         assert facts[0].tags == ["tag2"]
@@ -196,24 +212,28 @@ class TestUpdate:
 
 
 class TestSearchFilters:
-    def test_search_by_tag_filter(self, populated_engine):
-        results = populated_engine.search("programming", tags=["python"])
+    @pytest.mark.asyncio
+    async def test_search_by_tag_filter(self, populated_engine):
+        results = await populated_engine.search("programming", tags=["python"])
         for r in results:
-            # All results should have the python tag
-            fact = populated_engine._get_conn().execute(
+            conn = populated_engine._get_conn()
+            cursor = await conn.execute(
                 "SELECT tags FROM facts WHERE id = ?", (r.fact_id,)
-            ).fetchone()
+            )
+            fact = await cursor.fetchone()
             if fact:
                 tags = json.loads(fact[0])
                 assert "python" in tags
 
-    def test_search_by_fact_type_filter(self, populated_engine):
-        results = populated_engine.search("testing", fact_type="decision")
+    @pytest.mark.asyncio
+    async def test_search_by_fact_type_filter(self, populated_engine):
+        results = await populated_engine.search("testing", fact_type="decision")
         for r in results:
             assert r.fact_type == "decision"
 
-    def test_search_combined_filters(self, populated_engine):
-        results = populated_engine.search(
+    @pytest.mark.asyncio
+    async def test_search_combined_filters(self, populated_engine):
+        results = await populated_engine.search(
             "language", tags=["lang"], fact_type="knowledge"
         )
         for r in results:
@@ -224,33 +244,39 @@ class TestSearchFilters:
 
 
 class TestRecallPagination:
-    def test_recall_all(self, populated_engine):
-        facts = populated_engine.recall("proj-a")
+    @pytest.mark.asyncio
+    async def test_recall_all(self, populated_engine):
+        facts = await populated_engine.recall("proj-a")
         assert len(facts) == 3
 
-    def test_recall_with_limit(self, populated_engine):
-        facts = populated_engine.recall("proj-a", limit=2)
+    @pytest.mark.asyncio
+    async def test_recall_with_limit(self, populated_engine):
+        facts = await populated_engine.recall("proj-a", limit=2)
         assert len(facts) == 2
 
-    def test_recall_with_offset(self, populated_engine):
-        all_facts = populated_engine.recall("proj-a")
-        page2 = populated_engine.recall("proj-a", limit=2, offset=2)
+    @pytest.mark.asyncio
+    async def test_recall_with_offset(self, populated_engine):
+        all_facts = await populated_engine.recall("proj-a")
+        page2 = await populated_engine.recall("proj-a", limit=2, offset=2)
         assert len(page2) == 1
         assert page2[0].id == all_facts[2].id
 
-    def test_recall_pagination_consistency(self, populated_engine):
-        page1 = populated_engine.recall("proj-a", limit=2, offset=0)
-        page2 = populated_engine.recall("proj-a", limit=2, offset=2)
-        all_facts = populated_engine.recall("proj-a")
+    @pytest.mark.asyncio
+    async def test_recall_pagination_consistency(self, populated_engine):
+        page1 = await populated_engine.recall("proj-a", limit=2, offset=0)
+        page2 = await populated_engine.recall("proj-a", limit=2, offset=2)
+        all_facts = await populated_engine.recall("proj-a")
         paginated = page1 + page2
         assert len(paginated) == len(all_facts)
 
-    def test_recall_empty_project(self, engine):
-        facts = engine.recall("nonexistent")
+    @pytest.mark.asyncio
+    async def test_recall_empty_project(self, engine):
+        facts = await engine.recall("nonexistent")
         assert facts == []
 
-    def test_recall_limit_none_returns_all(self, populated_engine):
-        all_facts = populated_engine.recall("proj-a", limit=None)
+    @pytest.mark.asyncio
+    async def test_recall_limit_none_returns_all(self, populated_engine):
+        all_facts = await populated_engine.recall("proj-a", limit=None)
         assert len(all_facts) == 3
 
 
@@ -258,23 +284,26 @@ class TestRecallPagination:
 
 
 class TestExport:
-    def test_export_json(self, populated_engine):
-        facts = populated_engine.recall("proj-a")
+    @pytest.mark.asyncio
+    async def test_export_json(self, populated_engine):
+        facts = await populated_engine.recall("proj-a")
         result = export_facts(facts, "json")
         parsed = json.loads(result)
         assert len(parsed) == 3
         assert all("content" in f for f in parsed)
 
-    def test_export_csv(self, populated_engine):
-        facts = populated_engine.recall("proj-a")
+    @pytest.mark.asyncio
+    async def test_export_csv(self, populated_engine):
+        facts = await populated_engine.recall("proj-a")
         result = export_facts(facts, "csv")
         lines = result.strip().split("\n")
         assert len(lines) == 4  # header + 3 facts
         assert "id" in lines[0]
         assert "content" in lines[0]
 
-    def test_export_jsonl(self, populated_engine):
-        facts = populated_engine.recall("proj-a")
+    @pytest.mark.asyncio
+    async def test_export_jsonl(self, populated_engine):
+        facts = await populated_engine.recall("proj-a")
         result = export_facts(facts, "jsonl")
         lines = result.strip().split("\n")
         assert len(lines) == 3
@@ -282,15 +311,15 @@ class TestExport:
             parsed = json.loads(line)
             assert "content" in parsed
 
-    def test_export_empty(self, engine):
+    def test_export_empty(self):
         result = export_facts([], "json")
         assert json.loads(result) == []
 
-    def test_export_csv_empty(self, engine):
+    def test_export_csv_empty(self):
         result = export_facts([], "csv")
         assert result == ""
 
-    def test_export_invalid_format(self, engine):
+    def test_export_invalid_format(self):
         with pytest.raises(ValueError, match="Unsupported"):
             export_facts([], "xml")
 

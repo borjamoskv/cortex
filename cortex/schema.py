@@ -223,8 +223,26 @@ CREATE TABLE IF NOT EXISTS ghosts (
 """
 
 CREATE_GHOSTS_INDEX = """
-CREATE INDEX IF NOT EXISTS idx_ghosts_project ON ghosts(project);
 CREATE INDEX IF NOT EXISTS idx_ghosts_ref ON ghosts(reference);
+"""
+
+# ─── Graph CDC Outbox (Consistency) ──────────────────────────────────
+CREATE_GRAPH_OUTBOX = """
+CREATE TABLE IF NOT EXISTS graph_outbox (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    fact_id     INTEGER NOT NULL,
+    action      TEXT NOT NULL, -- e.g. 'deprecate'
+    payload     TEXT,
+    status      TEXT NOT NULL DEFAULT 'pending', -- pending, processed, failed
+    retry_count INTEGER DEFAULT 0,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    processed_at TEXT
+);
+"""
+
+CREATE_GRAPH_OUTBOX_INDEXES = """
+CREATE INDEX IF NOT EXISTS idx_graph_outbox_status ON graph_outbox(status);
+CREATE INDEX IF NOT EXISTS idx_graph_outbox_fact ON graph_outbox(fact_id);
 """
 
 # ─── All statements in order ─────────────────────────────────────────
@@ -248,6 +266,8 @@ ALL_SCHEMA = [
     CREATE_RWC_INDEXES,
     CREATE_GHOSTS,
     CREATE_GHOSTS_INDEX,
+    CREATE_GRAPH_OUTBOX,
+    CREATE_GRAPH_OUTBOX_INDEXES,
 ]
 
 

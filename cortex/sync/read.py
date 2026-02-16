@@ -13,7 +13,9 @@ from cortex.sync.common import (
     get_existing_contents,
     load_sync_state,
     save_sync_state,
+    calculate_fact_diff,
 )
+from cortex.sync.system import sync_system
 from cortex.temporal import now_iso
 
 if TYPE_CHECKING:
@@ -58,7 +60,7 @@ def sync_memory(engine: CortexEngine) -> SyncResult:
     try:
         system_hash = file_hash(system_file)
         if system_hash and system_hash != state.get("system_hash"):
-            _sync_system(engine, system_file, result)
+            sync_system(engine, system_file, result)
             state["system_hash"] = system_hash
     except Exception as e:
         result.errors.append(f"system.json: {e}")
@@ -113,7 +115,7 @@ def _sync_ghosts(engine: CortexEngine, path: Path, result: SyncResult) -> None:
         return
 
     # Deprecar ghosts anteriores (son snapshots temporales)
-    conn = engine._get_conn()
+    conn = engine._get_sync_conn()
     try:
         conn.execute(
             "UPDATE facts SET valid_until = ? WHERE fact_type = 'ghost' AND valid_until IS NULL",
@@ -132,7 +134,7 @@ def _sync_ghosts(engine: CortexEngine, path: Path, result: SyncResult) -> None:
             f"Bloqueado: {ghost_data.get('blocked_by', 'no')}"
         )
         try:
-            engine.store(
+            engine.store_sync(
                 project=project_name,
                 content=content,
                 fact_type="ghost",
@@ -147,89 +149,10 @@ def _sync_ghosts(engine: CortexEngine, path: Path, result: SyncResult) -> None:
             result.errors.append(f"Error sincronizando ghost {project_name}: {e}")
 
 
-def _calculate_fact_diff(existing: set[str], candidates: list[dict], content_generator: Any) -> list[tuple[str, dict]]:
-    """Calcula qué hechos son nuevos comparándolos con lo existente."""
-    results = []
-    for c in candidates:
-        content = content_generator(c)
-        if content not in existing:
-            results.append((content, c))
-    return results
 
 
-def _sync_system(engine: CortexEngine, path: Path, result: SyncResult) -> None:
-    """Sincroniza system.json — conocimiento global y decisiones."""
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError) as e:
-        result.errors.append(f"Error leyendo system.json: {e}")
-        return
 
-    # Obtener contenidos existentes para dedup
-    existing = get_existing_contents(engine, "__system__")
 
-    # knowledge_global
-    kb_candidates = data.get("knowledge_global", [])
-    new_kb = _calculate_fact_diff(existing, kb_candidates, lambda x: x.get("content", str(x)))
-    for content, kb in new_kb:
-        try:
-            engine.store(
-                project="__system__",
-                content=content,
-                fact_type="knowledge",
-                tags=["sistema", kb.get("topic", "general")],
-                confidence=kb.get("confidence", "stated"),
-                source="sync-agent-memory",
-                valid_from=kb.get("added") or kb.get("date"),
-                meta=kb,
-            )
-            result.facts_synced += 1
-            existing.add(content)
-        except Exception as e:
-            result.errors.append(f"Error system knowledge: {e}")
-
-    # decisions_global
-    dec_candidates = data.get("decisions_global", [])
-    new_dec = _calculate_fact_diff(existing, dec_candidates, lambda x: f"DECISION: {x.get('decision', str(x))} | RAZON: {x.get('reason', '')}")
-    for content, dec in new_dec:
-        try:
-            engine.store(
-                project="__system__",
-                content=content,
-                fact_type="decision",
-                tags=["sistema", "decision-global", dec.get("topic", "")],
-                confidence="verified",
-                source="sync-agent-memory",
-                valid_from=dec.get("date"),
-                meta=dec,
-            )
-            result.facts_synced += 1
-            existing.add(content)
-        except Exception as e:
-            result.errors.append(f"Error system decision: {e}")
-
-    # Ecosistema
-    eco = data.get("ecosystem", {})
-    if eco:
-        eco_content = (
-            f"Ecosistema: {eco.get('total_projects', '?')} proyectos | "
-            f"Foco: {', '.join(eco.get('active_focus', []))} | "
-            f"Diagnóstico: {eco.get('diagnosis', 'sin datos')}"
-        )
-        if eco_content not in existing:
-            try:
-                engine.store(
-                    project="__system__",
-                    content=eco_content,
-                    fact_type="knowledge",
-                    tags=["sistema", "ecosistema"],
-                    confidence="verified",
-                    source="sync-agent-memory",
-                    meta=eco,
-                )
-                result.facts_synced += 1
-            except Exception as e:
-                result.errors.append(f"Error ecosystem sync: {e}")
 
 
 def _sync_mistakes(engine: CortexEngine, path: Path, result: SyncResult) -> None:
@@ -242,10 +165,10 @@ def _sync_mistakes(engine: CortexEngine, path: Path, result: SyncResult) -> None
                 f"CAUSA: {m.get('root_cause', 'desconocida')} | "
                 f"FIX: {m.get('fix', 'desconocido')}")
 
-    new_mistakes = _calculate_fact_diff(existing, lines, generate_content)
+    new_mistakes = calculate_fact_diff(existing, lines, generate_content)
     for content, m in new_mistakes:
         try:
-            engine.store(
+            engine.store_sync(
                 project=m.get("project", "__system__"),
                 content=content,
                 fact_type="error",
@@ -271,10 +194,10 @@ def _sync_bridges(engine: CortexEngine, path: Path, result: SyncResult) -> None:
                 f"Patrón: {b.get('pattern', '?')} | "
                 f"Nota: {b.get('note', '')}")
 
-    new_bridges = _calculate_fact_diff(existing, lines, generate_content)
+    new_bridges = calculate_fact_diff(existing, lines, generate_content)
     for content, b in new_bridges:
         try:
-            engine.store(
+            engine.store_sync(
                 project="__bridges__",
                 content=content,
                 fact_type="bridge",

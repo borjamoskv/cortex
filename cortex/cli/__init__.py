@@ -56,11 +56,14 @@ from cortex.cli import launchpad_cmds  # noqa: E402, F401
 from cortex.cli import mejoralo_cmds  # noqa: E402, F401
 
 # ─── Registration ────────────────────────────────────────────────
+from cortex.cli.time_cmds import time_cmd, heartbeat_cmd  # noqa: E402
 from cortex.cli.vote_ledger import ledger  # noqa: E402
 from cortex.cli.timeline_cmds import timeline  # noqa: E402
 from cortex.cli.launchpad_cmds import launchpad  # noqa: E402
 from cortex.cli.mejoralo_cmds import mejoralo  # noqa: E402
 
+cli.add_command(time_cmd, name="time")
+cli.add_command(heartbeat_cmd, name="heartbeat")
 cli.add_command(ledger)
 cli.add_command(timeline)
 cli.add_command(launchpad)

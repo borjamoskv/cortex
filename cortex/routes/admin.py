@@ -1,8 +1,7 @@
 """
-CORTEX v4.0 — Admin Router.
+CORTEX v4.0 - Admin Router.
 """
 
-import sqlite3
 import logging
 from typing import Optional
 from fastapi import APIRouter, Depends, Query, Header, HTTPException
@@ -10,6 +9,8 @@ from starlette.concurrency import run_in_threadpool
 from cortex.auth import AuthResult, require_permission, get_auth_manager
 from cortex.models import StatusResponse
 from cortex.sync import export_to_json
+from cortex.api_deps import get_engine
+from cortex.engine import CortexEngine
 from cortex import api_state
 
 router = APIRouter(tags=["admin"])
@@ -24,11 +25,11 @@ async def export_project(
     """Export a project to a JSON file (with path validation)."""
     if fmt != "json":
         raise HTTPException(status_code=400, detail="Only JSON format supported via API")
-    
+
     if path:
         if any(c in path for c in ("\0", "\r", "\n", "\t")):
             raise HTTPException(status_code=400, detail="Invalid characters in path")
-            
+
         from pathlib import Path
         try:
             base_dir = Path.cwd().resolve()
@@ -37,8 +38,9 @@ async def export_project(
                 raise HTTPException(status_code=400, detail="Path must be relative and within the workspace")
         except (ValueError, RuntimeError) as e:
             raise HTTPException(status_code=400, detail=f"Invalid path: {e}")
-    
+
     try:
+        # export_to_json is sync, uses its own connection
         out_path = await run_in_threadpool(export_to_json, api_state.engine, project, path)
         return {"message": f"Exported project '{project}' to {out_path}", "path": str(out_path)}
     except Exception as e:
@@ -46,10 +48,13 @@ async def export_project(
         raise HTTPException(status_code=500, detail="Export failed")
 
 @router.get("/v1/status", response_model=StatusResponse)
-async def status(auth: AuthResult = Depends(require_permission("read"))) -> StatusResponse:
+async def status(
+    auth: AuthResult = Depends(require_permission("read")),
+    engine: CortexEngine = Depends(get_engine),
+) -> StatusResponse:
     """Get engine status and statistics."""
     try:
-        stats = await run_in_threadpool(api_state.engine.stats)
+        stats = await engine.stats()
         return StatusResponse(
             version="4.0.0a1",
             total_facts=stats["total_facts"],
@@ -60,7 +65,7 @@ async def status(auth: AuthResult = Depends(require_permission("read"))) -> Stat
             transactions=stats["transactions"],
             db_size_mb=stats["db_size_mb"],
         )
-    except sqlite3.Error as e:
+    except Exception as e:
         logger.error("Status unavailable: %s", e)
         raise HTTPException(status_code=500, detail="Status unavailable")
 
@@ -95,7 +100,7 @@ async def create_api_key(
         "name": api_key.name,
         "prefix": api_key.key_prefix,
         "tenant_id": api_key.tenant_id,
-        "message": "⚠️  Save this key — it will NOT be shown again.",
+        "message": "Save this key - it will NOT be shown again.",
     }
 
 @router.get("/v1/admin/keys")

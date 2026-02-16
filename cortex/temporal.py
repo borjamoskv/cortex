@@ -70,3 +70,41 @@ def build_temporal_filter_params(
             [as_of, as_of],
         )
 
+
+def time_travel_filter(
+    tx_id: int,
+    table_alias: str | None = None,
+) -> tuple[str, list]:
+    """Build SQL WHERE clause to reconstruct fact state at a specific transaction.
+
+    Returns facts whose ``tx_id`` is at or before the target transaction
+    and that had not yet been deprecated at that point.
+
+    Args:
+        tx_id: Transaction ID to travel to.
+        table_alias: Optional table alias prefix.
+
+    Returns:
+        Tuple of (SQL WHERE clause, parameters list).
+
+    Raises:
+        ValueError: If tx_id is not a positive integer or alias is unsafe.
+    """
+    if not isinstance(tx_id, int) or tx_id <= 0:
+        raise ValueError(f"Invalid tx_id: {tx_id!r}")
+
+    if table_alias is not None:
+        if not table_alias.isalnum():
+            raise ValueError(f"Invalid table alias: {table_alias!r}")
+        prefix = f"{table_alias}."
+    else:
+        prefix = ""
+
+    return (
+        f"{prefix}tx_id <= ? AND ("
+        f"{prefix}valid_until IS NULL OR "
+        f"{prefix}valid_until > (SELECT timestamp FROM transactions WHERE id = ?))",
+        [tx_id, tx_id],
+    )
+
+

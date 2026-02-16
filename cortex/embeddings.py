@@ -10,6 +10,7 @@ Produces 384-dimensional vectors using all-MiniLM-L6-v2.
 from __future__ import annotations
 
 import logging
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
@@ -20,6 +21,9 @@ logger = logging.getLogger("cortex.embeddings")
 DEFAULT_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 EMBEDDING_DIM = 384
 DEFAULT_CACHE_DIR = Path.home() / ".cortex" / "models"
+
+# Configurable LRU cache size via env var (default 1024)
+_CACHE_SIZE = int(os.environ.get("CORTEX_CACHE_SIZE", "1024"))
 
 
 class LocalEmbedder:
@@ -58,7 +62,7 @@ class LocalEmbedder:
                 "Run: pip install sentence-transformers onnxruntime"
             )
 
-    @lru_cache(maxsize=1024)
+    @lru_cache(maxsize=_CACHE_SIZE)
     def _embed_cached(self, text: str) -> list[float]:
         """Internal cached embedding for single strings."""
         self._ensure_model()
@@ -92,6 +96,44 @@ class LocalEmbedder:
             show_progress_bar=len(texts) > 50,
         )
         return [e.tolist() for e in embeddings]
+
+    def embed_batch_chunked(
+        self,
+        texts: list[str],
+        chunk_size: int = 50,
+        batch_size: int = 32,
+    ) -> list[list[float]]:
+        """WAL-aware batch embedding for swarm workloads.
+
+        Processes texts in chunks to prevent SQLite WAL bloat when
+        many agents generate embeddings simultaneously. Each chunk
+        produces embeddings that can be flushed to DB independently.
+
+        Args:
+            texts: List of texts to embed.
+            chunk_size: Number of texts per chunk (default 50).
+            batch_size: Internal batch size for the model (default 32).
+
+        Yields semantically identical results to embed_batch but
+        allows the caller to commit between chunks.
+        """
+        if not texts:
+            return []
+
+        all_embeddings: list[list[float]] = []
+        total_chunks = (len(texts) + chunk_size - 1) // chunk_size
+
+        for i in range(0, len(texts), chunk_size):
+            chunk = texts[i : i + chunk_size]
+            chunk_num = i // chunk_size + 1
+            logger.debug(
+                "Embedding chunk %d/%d (%d texts)",
+                chunk_num, total_chunks, len(chunk),
+            )
+            chunk_embeddings = self.embed_batch(chunk, batch_size=batch_size)
+            all_embeddings.extend(chunk_embeddings)
+
+        return all_embeddings
 
     @property
     def dimension(self) -> int:

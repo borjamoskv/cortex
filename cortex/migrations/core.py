@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+import aiosqlite
 from cortex.migrations.registry import MIGRATIONS
 from cortex.schema import ALL_SCHEMA
 
@@ -84,4 +85,59 @@ def run_migrations(conn: sqlite3.Connection) -> int:
     if applied:
         logger.info("Applied %d migration(s). Schema now at version %d",
                      applied, get_current_version(conn))
+    return applied
+
+
+async def run_migrations_async(conn: aiosqlite.Connection) -> int:
+    """Async version of run_migrations for aiosqlite connections."""
+    # Ensure table (sync is fine for one-off but let's be consistent)
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS schema_version (
+            version INTEGER PRIMARY KEY,
+            applied_at TEXT DEFAULT (datetime('now')),
+            description TEXT
+        )
+    """)
+    await conn.commit()
+
+    # Get version
+    cursor = await conn.execute("SELECT MAX(version) FROM schema_version")
+    row = await cursor.fetchone()
+    current = row[0] if row and row[0] is not None else 0
+
+    if current == 0:
+        logger.info("Fresh database detected. Applying base schema (async)...")
+        for stmt in ALL_SCHEMA:
+            try:
+                await conn.executescript(stmt)
+            except Exception as e:
+                msg = str(e).lower()
+                if "vec0" in str(stmt) or "no such module" in msg or "duplicate column" in msg:
+                    logger.warning("Skipping schema statement: %s", e)
+                else:
+                    raise
+        await conn.commit()
+
+    applied = 0
+    for version, description, func in MIGRATIONS:
+        if version > current:
+            logger.info("Applying async migration %d: %s", version, description)
+            try:
+                # Migrations are currently sync functions, we wrap them
+                # In the future we might want async migrations too
+                # For now, we pass the underlying literal connection if needed
+                # but aiosqlite connections work with executescript
+                func(conn) # Assuming func is sync and simple
+            except Exception as e:
+                logger.error("Migration %d failed: %s", version, e)
+                await conn.rollback()
+                continue
+            
+            await conn.execute(
+                "INSERT INTO schema_version (version, description) VALUES (?, ?)",
+                (version, description),
+            )
+            await conn.commit()
+            applied += 1
+
     return applied

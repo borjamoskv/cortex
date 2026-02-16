@@ -21,7 +21,7 @@ MIGRATIONS = [
     (1, "Add updated_at column", _migration_001_add_updated_at),
     (2, "Add performance indexes", _migration_002_add_indexes),
     (3, "Enable WAL mode", _migration_003_enable_wal),
-    (4, "Add IVF vector index", _migration_004_vector_index),
+    (4, "Pruned embeddings table (replaces dead IVF)", _migration_004_vector_index),
     (5, "Setup FTS5 search", _migration_005_fts5_setup),
     (6, "Graph Memory tables", _migration_006_graph_memory),
     (7, "Consensus Layer (votes + score)", _migration_007_consensus_layer),

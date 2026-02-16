@@ -39,6 +39,7 @@ from cortex.routes import (
     ledger as ledger_router,
     missions as missions_router,
     mejoralo as mejoralo_router,
+    gate as gate_router,
 )
 
 logger = logging.getLogger("uvicorn.error")
@@ -48,7 +49,7 @@ logger = logging.getLogger("uvicorn.error")
 async def lifespan(app: FastAPI):
     """Initialize engine, auth, and timing on startup."""
     engine = CortexEngine(DB_PATH)
-    engine.init_db()
+    await engine.init_db()
     auth_manager = AuthManager(DB_PATH)
     
     # Sync to cortex.auth so dependencies use the same instance
@@ -72,7 +73,7 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
-        engine.close()
+        await engine.close()
         timing_conn.close()
         cortex.auth._auth_manager = None
         api_state.engine = None
@@ -193,4 +194,5 @@ app.include_router(graph_router.router)
 app.include_router(ledger_router.router)
 app.include_router(missions_router.router)
 app.include_router(mejoralo_router.router)
+app.include_router(gate_router.router)
 app.include_router(hive_router)

@@ -38,19 +38,27 @@ def _migration_003_enable_wal(conn: sqlite3.Connection):
 
 
 def _migration_004_vector_index(conn: sqlite3.Connection):
-    """Add IVF index to fact_embeddings for sub-millisecond search."""
-    # Note: sqlite-vec uses a specific syntax for virtual table indexes.
-    # In vec0, we can create an index on the embedding column.
-    try:
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_fact_embeddings_ivf "
-            "ON fact_embeddings(embedding) USING ivf0"
+    """Create pruned_embeddings table for embedding lifecycle management.
+
+    NOTE: The original migration attempted ``CREATE INDEX USING ivf0`` which
+    is invalid sqlite-vec syntax (vec0 virtual tables do not support secondary
+    indexes).  Replaced with a pruning metadata table that stores SHA-256
+    hashes of archived embeddings for cold-storage verification.
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS pruned_embeddings (
+            fact_id     INTEGER PRIMARY KEY,
+            hash        TEXT NOT NULL,
+            dimension   INTEGER NOT NULL DEFAULT 384,
+            pruned_at   TEXT NOT NULL DEFAULT (datetime('now')),
+            reason      TEXT DEFAULT 'deprecated'
         )
-        logger.info("Migration 004: Added IVF index to fact_embeddings")
-    except sqlite3.OperationalError as e:
-        # Fallback: if ivf0 is not available in the current sqlite-vec build, 
-        # we log it but don't fail, as brute force KNN still works.
-        logger.warning("Migration 004 skipped: IVF index not supported by this build (%s)", e)
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_pruned_at "
+        "ON pruned_embeddings(pruned_at)"
+    )
+    logger.info("Migration 004: Created pruned_embeddings table (replaces dead IVF index)")
 
 
 def _migration_005_fts5_setup(conn: sqlite3.Connection):

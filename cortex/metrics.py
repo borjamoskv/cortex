@@ -4,21 +4,44 @@ CORTEX v4.0 — Prometheus Metrics.
 Lightweight metrics middleware for the CORTEX API.
 No prometheus_client dependency — uses a simple in-memory registry
 that exposes a /metrics endpoint in Prometheus text format.
+
+Critical metrics (ledger errors, consensus failures) are also persisted
+to CORTEX as ``system_health`` facts so they survive process restarts
+and remain queryable during forensic analysis.
 """
 
 from __future__ import annotations
 
+import asyncio
+import json
+import logging
 import time
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from typing import Any
 
+logger = logging.getLogger("cortex")
+
 _HISTOGRAM_MAX_OBSERVATIONS = 1000
+_CRITICAL_DEBOUNCE_SECONDS = 60
+
+# Metric names that will be persisted as system_health facts.
+CRITICAL_METRICS: set[str] = {
+    "cortex_ledger_violations_total",
+    "cortex_ledger_checkpoint_failures_total",
+    "cortex_consensus_failures_total",
+    "cortex_integrity_checks_total",
+}
 
 
 @dataclass
 class MetricsRegistry:
-    """Simple in-memory metrics registry (no external deps)."""
+    """Simple in-memory metrics registry (no external deps).
+
+    When a *critical* metric is incremented, this registry also persists
+    the event as a ``system_health`` fact in CORTEX (debounced to avoid
+    flooding the DB during cascading failures).
+    """
 
     _counters: dict[str, int] = field(default_factory=lambda: defaultdict(int))
     _histograms: dict[str, deque[float]] = field(
@@ -27,11 +50,41 @@ class MetricsRegistry:
     _hist_count: dict[str, int] = field(default_factory=lambda: defaultdict(int))
     _hist_sum: dict[str, float] = field(default_factory=lambda: defaultdict(float))
     _gauges: dict[str, float] = field(default_factory=lambda: defaultdict(float))
+    # Critical-metrics persistence
+    _engine: Any = field(default=None, repr=False)
+    _last_persisted: dict[str, float] = field(default_factory=dict)
 
-    def inc(self, name: str, labels: dict[str, str] | None = None, value: int = 1) -> None:
-        """Increment a counter."""
+    # ─── Engine injection ─────────────────────────────────────────
+
+    def set_engine(self, engine: Any) -> None:
+        """Inject the CortexEngine so critical metrics can be persisted.
+
+        Called once during ``CortexEngine.init_db()``.  Avoids circular
+        imports by accepting ``Any``.
+        """
+        self._engine = engine
+
+    # ─── Core metric operations ───────────────────────────────────
+
+    def inc(
+        self,
+        name: str,
+        labels: dict[str, str] | None = None,
+        value: int = 1,
+        *,
+        meta: dict[str, Any] | None = None,
+    ) -> None:
+        """Increment a counter.
+
+        If *name* is in ``CRITICAL_METRICS`` and an engine is available,
+        the event is also scheduled for persistence as a ``system_health``
+        fact (debounced).
+        """
         key = self._key(name, labels)
         self._counters[key] += value
+
+        if name in CRITICAL_METRICS and self._engine is not None:
+            self._schedule_persist(name, key, labels, meta)
 
     def observe(self, name: str, value: float, labels: dict[str, str] | None = None) -> None:
         """Record a histogram observation (capped circular buffer)."""
@@ -50,6 +103,66 @@ class MetricsRegistry:
             return name
         label_str = ",".join(f'{k}="{v}"' for k, v in sorted(labels.items()))
         return f"{name}{{{label_str}}}"
+
+    # ─── Critical metrics persistence ─────────────────────────────
+
+    def _schedule_persist(
+        self,
+        name: str,
+        key: str,
+        labels: dict[str, str] | None,
+        meta: dict[str, Any] | None,
+    ) -> None:
+        """Schedule an async persist if debounce window has elapsed."""
+        now = time.monotonic()
+        last = self._last_persisted.get(key, 0.0)
+        if now - last < _CRITICAL_DEBOUNCE_SECONDS:
+            return
+        self._last_persisted[key] = now
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(self._persist_critical(name, key, labels, meta))
+        except RuntimeError:
+            # No running loop — skip persistence (e.g. during tests).
+            pass
+
+    async def _persist_critical(
+        self,
+        name: str,
+        key: str,
+        labels: dict[str, str] | None,
+        extra_meta: dict[str, Any] | None,
+    ) -> None:
+        """Persist a critical metric event as a ``system_health`` fact."""
+        try:
+            fact_meta = {
+                "metric": name,
+                "key": key,
+                "labels": labels or {},
+                "counter_value": self._counters.get(key, 0),
+            }
+            if extra_meta:
+                fact_meta.update(extra_meta)
+
+            content = f"[METRIC] {name}: {self._counters.get(key, 0)}"
+            if labels:
+                content += f" ({', '.join(f'{k}={v}' for k, v in labels.items())})"
+
+            await self._engine.store(
+                project="__system__",
+                content=content,
+                fact_type="system_health",
+                tags=["metrics", "critical", name],
+                confidence="verified",
+                source="metrics_registry",
+                meta=fact_meta,
+            )
+            logger.debug("Persisted critical metric: %s", key)
+        except Exception:
+            # Never let metric persistence crash the caller.
+            logger.warning("Failed to persist critical metric %s", key, exc_info=True)
+
+    # ─── Prometheus rendering ─────────────────────────────────────
 
     def to_prometheus(self) -> str:
         """Render all metrics in Prometheus text exposition format."""
@@ -96,6 +209,7 @@ class MetricsRegistry:
         self._hist_count.clear()
         self._hist_sum.clear()
         self._gauges.clear()
+        self._last_persisted.clear()
 
 
 # Global singleton

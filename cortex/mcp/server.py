@@ -6,6 +6,9 @@ import asyncio
 import json
 import logging
 from concurrent.futures import ThreadPoolExecutor
+from cortex.engine import CortexEngine
+from cortex.engine.ledger import ImmutableLedger
+from cortex.graph.engine import get_graph_async
 from functools import lru_cache
 from typing import Optional
 
@@ -168,7 +171,7 @@ def create_mcp_server(config: Optional[MCPServerConfig] = None) -> FastMCP:
     async def cortex_ledger_verify() -> str:
         """Perform a full integrity check on the CORTEX ledger."""
         await ensure_initialized()
-        from cortex.ledger import ImmutableLedger
+        from cortex.engine.ledger import ImmutableLedger
         
         async with pool.acquire() as conn:
             ledger = ImmutableLedger(conn)

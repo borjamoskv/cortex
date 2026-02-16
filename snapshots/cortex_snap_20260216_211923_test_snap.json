@@ -1,0 +1,8 @@
+{
+  "name": "test_snap",
+  "tx_id": 2,
+  "merkle_root": "8e493afc422a72801e204ce05bf2a471f2c44e55dbfb7fe81c609cbd433956e4",
+  "created_at": "2026-02-16T21:19:23.318382",
+  "size_mb": 1.79,
+  "path": "snapshots/cortex_snap_20260216_211923_test_snap.db"
+}

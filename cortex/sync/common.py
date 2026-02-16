@@ -124,7 +124,7 @@ def get_existing_contents(
     Returns:
         Set de strings con el contenido de cada fact existente.
     """
-    conn = engine._get_conn()
+    conn = engine._get_sync_conn()
     query = "SELECT content FROM facts WHERE valid_until IS NULL"
     params: list = []
 
@@ -163,3 +163,13 @@ def db_content_hash(engine: CortexEngine, fact_type: str | None = None) -> str:
     for row in rows:
         hasher.update(f"{row[0]}|{row[1]}|{row[2]}|{row[3]}\n".encode("utf-8"))
     return hasher.hexdigest()
+
+
+def calculate_fact_diff(existing: Set[str], candidates: list[dict], content_generator: Any) -> list[tuple[str, dict]]:
+    """Calcula qué hechos son nuevos comparándolos con lo existente."""
+    results = []
+    for c in candidates:
+        content = content_generator(c)
+        if content not in existing:
+            results.append((content, c))
+    return results

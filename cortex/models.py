@@ -15,6 +15,7 @@ class StoreRequest(BaseModel):
     metadata: dict | None = Field(None, description="Optional JSON metadata")
 
     @field_validator("project", "content")
+    @classmethod
     def not_empty(cls, v: str) -> str:
         if not v or not v.strip():
             raise ValueError("Must not be empty or whitespace only")
@@ -36,6 +37,7 @@ class SearchRequest(BaseModel):
     tags: Optional[List[str]] = Field(None, description="Filter by tags")
     
     @field_validator("query")
+    @classmethod
     def not_empty(cls, v: str) -> str:
         if not v or not v.strip():
             raise ValueError("Must not be empty or whitespace only")
@@ -233,3 +235,33 @@ class MejoraloShipResponse(BaseModel):
     seals: List[ShipSealModel]
     passed: int
     total: int = 7
+
+
+# ─── SovereignGate Models ────────────────────────────────────────────
+
+class GateApprovalRequest(BaseModel):
+    signature: str = Field(..., description="HMAC-SHA256 signature of the challenge")
+    operator_id: Optional[str] = Field(None, description="Operator identifier")
+
+
+class GateActionResponse(BaseModel):
+    action_id: str
+    level: str
+    description: str
+    command: Optional[List[str]] = None
+    project: Optional[str] = None
+    status: str
+    created_at: str
+    approved_at: Optional[str] = None
+    operator_id: Optional[str] = None
+
+
+class GateStatusResponse(BaseModel):
+    policy: str
+    timeout_seconds: int
+    pending: int = 0
+    approved: int = 0
+    denied: int = 0
+    expired: int = 0
+    executed: int = 0
+    total_audit_entries: int = 0

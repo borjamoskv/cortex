@@ -354,7 +354,8 @@ notebook = {
     "nbformat_minor": 4,
 }
 
-out_path = Path("notebooks/cortex_notebooklm.ipynb")
+from pathlib import Path as _Path
+out_path = _Path("notebooks/cortex_notebooklm.ipynb")
 out_path.parent.mkdir(exist_ok=True)
 with open(out_path, "w", encoding="utf-8") as f:
     json.dump(notebook, f, indent=1, ensure_ascii=False)

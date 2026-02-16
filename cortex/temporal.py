@@ -37,19 +37,36 @@ def is_valid_at(valid_from: str, valid_until: str | None, at: str | None = None)
     return True
 
 
-def build_temporal_filter_params(as_of: str | None = None) -> tuple[str, list]:
+def build_temporal_filter_params(
+    as_of: str | None = None,
+    table_alias: str | None = None,
+) -> tuple[str, list]:
     """Build parameterized SQL WHERE clause for temporal filtering.
 
     Args:
         as_of: ISO 8601 timestamp. None = current facts only.
+        table_alias: Optional table alias prefix (e.g. "f" → "f.valid_from").
+                     If None, uses bare column names.
 
     Returns:
         Tuple of (SQL WHERE clause, parameters list).
+
+    Raises:
+        ValueError: If table_alias contains non-alphanumeric characters.
     """
+    # Defense-in-depth: whitelist the alias to prevent injection
+    if table_alias is not None:
+        if not table_alias.isalnum():
+            raise ValueError(f"Invalid table alias: {table_alias!r}")
+        prefix = f"{table_alias}."
+    else:
+        prefix = ""
+
     if as_of is None:
-        return "valid_until IS NULL", []
+        return f"{prefix}valid_until IS NULL", []
     else:
         return (
-            "valid_from <= ? AND (valid_until IS NULL OR valid_until > ?)",
+            f"{prefix}valid_from <= ? AND ({prefix}valid_until IS NULL OR {prefix}valid_until > ?)",
             [as_of, as_of],
         )
+

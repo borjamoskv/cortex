@@ -664,11 +664,11 @@ class CortexEngine:
 
         if as_of:
             clause, params = build_temporal_filter_params(as_of)
-            query = f"""
+            query = """
                 SELECT id, project, content, fact_type, tags, confidence,
                        valid_from, valid_until, source, meta
                 FROM facts
-                WHERE project = ? AND {clause}
+                WHERE project = ? AND """ + clause + """
                 ORDER BY valid_from DESC
                 """
             # Combine params safely

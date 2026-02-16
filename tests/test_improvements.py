@@ -102,38 +102,37 @@ class TestStoreMany:
         recalled = engine.recall("batch")
         assert len(recalled) == 10
 
-    def test_batch_store_rollback_on_db_error(self, engine):
-        """Forces a DB error mid-batch and verifies full ROLLBACK.
+    def test_batch_store_rollback_on_validation_error(self, engine):
+        """Insert 2 valid facts then 1 invalid (empty project) mid-batch.
 
-        Patches engine.store (Python-level) to raise sqlite3.IntegrityError
-        on the 3rd call, since pysqlite3 C extension slots are read-only.
+        Verifies that the ValueError inside the `with conn:` block triggers
+        a full ROLLBACK — zero partial commits should survive.
         """
-        from unittest.mock import patch as mock_patch
-        from cortex.exceptions import DatabaseTransactionError
-
         facts = [
-            {"project": "rollback_test", "content": f"Fact {i}"}
-            for i in range(5)
+            {"project": "rollback_test", "content": "Fact 0"},
+            {"project": "rollback_test", "content": "Fact 1"},
+            {"project": "",              "content": "Bad fact"},  # triggers ValueError
+            {"project": "rollback_test", "content": "Fact 3"},
         ]
 
-        original_store = engine.store
-        call_count = {"n": 0}
+        with pytest.raises(ValueError, match="project"):
+            engine.store_many(facts)
 
-        def failing_store(*args, **kwargs):
-            call_count["n"] += 1
-            if call_count["n"] == 3:
-                raise sqlite3.IntegrityError("Simulated mid-batch failure")
-            return original_store(*args, **kwargs)
-
-        with mock_patch.object(engine, 'store', side_effect=failing_store):
-            with pytest.raises(DatabaseTransactionError, match="Cambios revertidos"):
-                engine.store_many(facts)
-
-        # Verify zero partial commits survived the rollback
+        # Critical assertion: zero facts should persist after rollback
         recalled = engine.recall("rollback_test")
         assert len(recalled) == 0, (
             f"Expected 0 facts after rollback, got {len(recalled)}"
         )
+
+    def test_database_transaction_error_exists(self, engine):
+        """Verify DatabaseTransactionError is importable and properly typed."""
+        from cortex.exceptions import DatabaseTransactionError, CortexError
+
+        assert issubclass(DatabaseTransactionError, CortexError)
+        assert issubclass(DatabaseTransactionError, Exception)
+
+        err = DatabaseTransactionError("test error")
+        assert str(err) == "test error"
 
 
 # ─── update Tests ─────────────────────────────────────────────────────

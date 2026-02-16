@@ -88,8 +88,8 @@ def semantic_search(
         params.append(project)
 
     if as_of:
-        clause, t_params = build_temporal_filter_params(as_of)
-        sql += f" AND f.{clause}"
+        clause, t_params = build_temporal_filter_params(as_of, table_alias="f")
+        sql += " AND " + clause
         params.extend(t_params)
     else:
         # Default to active facts
@@ -168,7 +168,7 @@ def text_search(
 
         if as_of:
             clause, t_params = build_temporal_filter_params(as_of)
-            sql += f" AND {clause}"
+            sql += " AND " + clause
             params.extend(t_params)
         else:
             sql += " AND valid_until IS NULL"

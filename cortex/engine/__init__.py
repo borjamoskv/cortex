@@ -25,8 +25,12 @@ from cortex.temporal import now_iso
 logger = logging.getLogger("cortex")
 
 
-class CortexEngine(StoreMixin, QueryMixin, ConsensusMixin, SyncCompatMixin):
-    """The Sovereign Ledger for AI Agents."""
+from cortex.facts.manager import FactManager
+from cortex.embeddings.manager import EmbeddingManager
+from cortex.consensus.manager import ConsensusManager
+
+class CortexEngine(SyncCompatMixin):
+    """The Sovereign Ledger for AI Agents (Composite Orchestrator)."""
 
     def __init__(
         self,
@@ -36,11 +40,15 @@ class CortexEngine(StoreMixin, QueryMixin, ConsensusMixin, SyncCompatMixin):
         self._db_path = Path(db_path).expanduser()
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
         self._auto_embed = auto_embed
-        self._embedder: Optional[LocalEmbedder] = None
         self._conn: Optional[aiosqlite.Connection] = None
         self._vec_available = False
         self._conn_lock = asyncio.Lock()
         self._ledger = None  # Wave 5: ImmutableLedger (lazy init)
+        
+        # Composition layers
+        self.facts = FactManager(self)
+        self.embeddings = EmbeddingManager(self)
+        self.consensus = ConsensusManager(self)
 
     # ─── Connection ───────────────────────────────────────────────
 
@@ -55,10 +63,7 @@ class CortexEngine(StoreMixin, QueryMixin, ConsensusMixin, SyncCompatMixin):
             )
 
             try:
-                # Note: handle extension loading for aiosqlite
                 await self._conn.enable_load_extension(True)
-                # Use lower level load_extension if sqlite_vec.load fails on async
-                # In Wave 5, we prioritize robust extension loading
                 await self._conn.load_extension(sqlite_vec.loadable_path())
                 await self._conn.enable_load_extension(False)
                 self._vec_available = True
@@ -72,20 +77,35 @@ class CortexEngine(StoreMixin, QueryMixin, ConsensusMixin, SyncCompatMixin):
             return self._conn
 
     def _get_conn(self) -> aiosqlite.Connection:
-        """Internal helper - WARNING: Use get_conn() wherever possible."""
         if self._conn is None:
              raise RuntimeError("Connection not initialized. Call get_conn() first.")
         return self._conn
 
-    def get_connection(self) -> aiosqlite.Connection:
-        """Public alias for backward compatibility. WARNING: Synchronous call to async resource."""
-        return self._get_conn()
+    # ─── Backward Compatibility Aliases & Delegation ──────────────
 
-    def _get_embedder(self) -> LocalEmbedder:
-        """Lazily initialize and return the local embedding model."""
-        if self._embedder is None:
-            self._embedder = LocalEmbedder()
-        return self._embedder
+    async def store(self, *args, **kwargs):
+        return await self.facts.store(*args, **kwargs)
+
+    async def search(self, *args, **kwargs):
+        return await self.facts.search(*args, **kwargs)
+
+    async def recall(self, *args, **kwargs):
+        return await self.facts.recall(*args, **kwargs)
+
+    async def update(self, *args, **kwargs):
+        return await self.facts.update(*args, **kwargs)
+
+    async def deprecate(self, *args, **kwargs):
+        return await self.facts.deprecate(*args, **kwargs)
+
+    async def history(self, *args, **kwargs):
+        return await self.facts.history(*args, **kwargs)
+
+    async def vote(self, *args, **kwargs):
+        return await self.consensus.vote(*args, **kwargs)
+
+    async def stats(self):
+        return await self.facts.stats()
 
     # ─── Schema ───────────────────────────────────────────────────
 
@@ -102,7 +122,6 @@ class CortexEngine(StoreMixin, QueryMixin, ConsensusMixin, SyncCompatMixin):
             await conn.executescript(stmt)
         await conn.commit()
 
-        # run_migrations needs to be async too
         from cortex.migrations.core import run_migrations_async
         await run_migrations_async(conn)
 
@@ -113,7 +132,6 @@ class CortexEngine(StoreMixin, QueryMixin, ConsensusMixin, SyncCompatMixin):
             )
         await conn.commit()
 
-        # Wave 5: Initialize Immutable Ledger
         self._ledger = ImmutableLedger(conn)
         metrics.set_engine(self)
         logger.info("CORTEX database initialized (async) at %s", self._db_path)
@@ -132,9 +150,6 @@ class CortexEngine(StoreMixin, QueryMixin, ConsensusMixin, SyncCompatMixin):
         ph = prev[0] if prev else "GENESIS"
         th = compute_tx_hash(ph, project, action, dj, ts)
         
-        # Wave 5: Immutable Vote Ledger
-        # If action is VOTE, we should ensure extra verification logic here
-        
         c = await conn.execute(
             "INSERT INTO transactions "
             "(project, action, detail, prev_hash, hash, timestamp) "
@@ -143,7 +158,6 @@ class CortexEngine(StoreMixin, QueryMixin, ConsensusMixin, SyncCompatMixin):
         )
         tx_id = c.lastrowid
 
-        # Wave 5: Auto-checkpoint after threshold
         if self._ledger:
             try:
                 self._ledger.record_write()
@@ -158,16 +172,13 @@ class CortexEngine(StoreMixin, QueryMixin, ConsensusMixin, SyncCompatMixin):
         return tx_id
 
     async def verify_ledger(self) -> dict:
-        """Verify ledger integrity (hash chain + Merkle checkpoints)."""
         if not self._ledger:
             from cortex.engine.ledger import ImmutableLedger
             self._ledger = ImmutableLedger(await self.get_conn())
         return await self._ledger.verify_integrity_async()
 
     async def process_graph_outbox_async(self, limit: int = 10) -> int:
-        """Process pending CDC events to sync Neo4j."""
-        from cortex.graph import get_graph
-        
+        from cortex.graph.backends.neo4j import Neo4jBackend
         conn = await self.get_conn()
         async with conn.execute(
             "SELECT id, fact_id, action FROM graph_outbox WHERE status = 'pending' LIMIT ?",
@@ -179,13 +190,9 @@ class CortexEngine(StoreMixin, QueryMixin, ConsensusMixin, SyncCompatMixin):
             return 0
             
         processed_count = 0
-        # For simplicity, we get the Neo4j backend via engine's graph interface
-        # We assume Neo4j is configured if initialized
         try:
-            from cortex.graph.backends.neo4j import Neo4jBackend
             neo4j = Neo4jBackend()
             if not neo4j._initialized:
-                logger.debug("Neo4j not initialized, skipping outbox processing")
                 return 0
         except ImportError:
             return 0
@@ -222,13 +229,14 @@ class CortexEngine(StoreMixin, QueryMixin, ConsensusMixin, SyncCompatMixin):
     def _row_to_fact(row) -> Fact:
         return row_to_fact(row)
 
+    # ─── Lifecycle ────────────────────────────────────────────────
+
     async def close(self):
         if self._conn:
             await self._conn.close()
             self._conn = None
         self.close_sync()
         self._ledger = None
-        self._embedder = None
 
     async def __aenter__(self):
         return self

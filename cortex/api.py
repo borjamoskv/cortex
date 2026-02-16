@@ -67,7 +67,16 @@ logger = logging.getLogger("uvicorn.error")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialize engine, auth, and timing on startup."""
+    """Initialize async connection pool, engine, auth, and timing on startup."""
+    from cortex.connection_pool import CortexConnectionPool
+    from cortex.engine_async import AsyncCortexEngine
+    
+    # 1. Initialize Core Async Foundation (Wave 5)
+    pool = CortexConnectionPool(DB_PATH)
+    await pool.initialize()
+    async_engine = AsyncCortexEngine(pool)
+    
+    # 2. Legacy Engine for compatibility
     engine = CortexEngine(DB_PATH)
     await engine.init_db()
     auth_manager = AuthManager(DB_PATH)
@@ -80,12 +89,14 @@ async def lifespan(app: FastAPI):
     timing_conn = sqlite3.connect(DB_PATH, timeout=10, check_same_thread=False)
     tracker = TimingTracker(timing_conn)
     
-    # Store in app state to avoid globals
-    app.state.engine = engine
+    # Store in app state
+    app.state.pool = pool
+    app.state.async_engine = async_engine
+    app.state.engine = engine  # Kept as 'engine' for legacy routes
     app.state.auth_manager = auth_manager
     app.state.tracker = tracker
     
-    # Backward compatibility for api_state (temporary)
+    # Backward compatibility for api_state
     api_state.engine = engine
     api_state.auth_manager = auth_manager
     api_state.tracker = tracker
@@ -93,6 +104,7 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        await pool.close()
         await engine.close()
         timing_conn.close()
         cortex.auth._auth_manager = None

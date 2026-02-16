@@ -8,9 +8,9 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from cortex.api_deps import get_engine
+from cortex.api_deps import get_async_engine
 from cortex.auth import AuthResult, require_permission
-from cortex.engine import CortexEngine
+from cortex.engine_async import AsyncCortexEngine
 from cortex.models import (
     FactResponse,
     StoreRequest,
@@ -28,7 +28,7 @@ router = APIRouter(tags=["facts"])
 async def store_fact(
     req: StoreRequest,
     auth: AuthResult = Depends(require_permission("write")),
-    engine: CortexEngine = Depends(get_engine),
+    engine: AsyncCortexEngine = Depends(get_async_engine),
 ) -> StoreResponse:
     """Store a fact with automatic tenant isolation."""
     fact_id = await engine.store(
@@ -50,7 +50,7 @@ async def recall_project(
     project: str,
     limit: Optional[int] = Query(None, ge=1, le=1000),
     auth: AuthResult = Depends(require_permission("read")),
-    engine: CortexEngine = Depends(get_engine),
+    engine: AsyncCortexEngine = Depends(get_async_engine),
 ) -> List[FactResponse]:
     """Recall facts for a specific project with tenant isolation."""
     if project != auth.tenant_id:
@@ -60,20 +60,20 @@ async def recall_project(
 
     return [
         FactResponse(
-            id=f.id,
-            project=f.project,
-            content=f.content,
-            fact_type=f.fact_type,
-            tags=f.tags,
-            created_at=f.created_at,
-            updated_at=f.updated_at,
-            valid_from=f.valid_from,
-            valid_until=f.valid_until,
-            metadata=f.meta if f.meta else None,
-            confidence=f.confidence,
-            consensus_score=f.consensus_score,
-            hash=f.hash,
-            tx_id=f.tx_id,
+            id=f["id"],
+            project=f["project"],
+            content=f["content"],
+            fact_type=f["fact_type"],
+            tags=f["tags"],
+            created_at=f["created_at"],
+            updated_at=f["updated_at"],
+            valid_from=f["valid_from"],
+            valid_until=f["valid_until"],
+            metadata=f["meta"] if f.get("meta") else None,
+            confidence=f["confidence"],
+            consensus_score=f["consensus_score"],
+            hash=f.get("hash"),
+            tx_id=f.get("tx_id"),
         )
         for f in facts
     ]
@@ -84,30 +84,23 @@ async def cast_vote(
     fact_id: int,
     req: VoteRequest,
     auth: AuthResult = Depends(require_permission("write")),
-    engine: CortexEngine = Depends(get_engine),
+    engine: AsyncCortexEngine = Depends(get_async_engine),
 ) -> VoteResponse:
     """Cast a consensus vote (verify/dispute) on a fact."""
     try:
-        conn = await engine.get_conn()
-        cursor = await conn.execute(
-            "SELECT project FROM facts WHERE id = ?", (fact_id,)
-        )
-        row = await cursor.fetchone()
-        project = row[0] if row else None
-
-        if not project:
+        fact = await engine.get_fact(fact_id)
+        if not fact:
             raise HTTPException(status_code=404, detail=f"Fact #{fact_id} not found")
-        if project != auth.tenant_id:
+        
+        if fact["project"] != auth.tenant_id:
             raise HTTPException(status_code=403, detail="Forbidden: Fact belongs to another tenant")
 
         agent_id = auth.key_name or "api_agent"
         score = await engine.vote(fact_id, agent_id, req.value)
 
-        cursor = await conn.execute(
-            "SELECT confidence FROM facts WHERE id = ?", (fact_id,)
-        )
-        row = await cursor.fetchone()
-        confidence = row[0] if row else "unknown"
+        # Re-fetch for updated confidence
+        updated_fact = await engine.get_fact(fact_id)
+        confidence = updated_fact["confidence"] if updated_fact else "unknown"
 
         return VoteResponse(
             fact_id=fact_id,
@@ -130,20 +123,15 @@ async def cast_vote_v2(
     fact_id: int,
     req: VoteV2Request,
     auth: AuthResult = Depends(require_permission("write")),
-    engine: CortexEngine = Depends(get_engine),
+    engine: AsyncCortexEngine = Depends(get_async_engine),
 ) -> VoteResponse:
     """Cast a reputation-weighted consensus vote (RWC)."""
     try:
-        conn = await engine.get_conn()
-        cursor = await conn.execute(
-            "SELECT project FROM facts WHERE id = ?", (fact_id,)
-        )
-        row = await cursor.fetchone()
-        project = row[0] if row else None
-
-        if not project:
+        fact = await engine.get_fact(fact_id)
+        if not fact:
             raise HTTPException(status_code=404, detail=f"Fact #{fact_id} not found")
-        if project != auth.tenant_id:
+        
+        if fact["project"] != auth.tenant_id:
             raise HTTPException(status_code=403, detail="Forbidden: Fact belongs to another tenant")
 
         score = await engine.vote(
@@ -153,11 +141,9 @@ async def cast_vote_v2(
             agent_id=req.agent_id,
         )
 
-        cursor = await conn.execute(
-            "SELECT confidence FROM facts WHERE id = ?", (fact_id,)
-        )
-        row = await cursor.fetchone()
-        confidence = row[0] if row else "unknown"
+        # Re-fetch for updated confidence
+        updated_fact = await engine.get_fact(fact_id)
+        confidence = updated_fact["confidence"] if updated_fact else "unknown"
 
         return VoteResponse(
             fact_id=fact_id,
@@ -179,49 +165,27 @@ async def cast_vote_v2(
 async def get_votes(
     fact_id: int,
     auth: AuthResult = Depends(require_permission("read")),
-    engine: CortexEngine = Depends(get_engine),
+    engine: AsyncCortexEngine = Depends(get_async_engine),
 ) -> List[dict]:
     """Retrieve all votes for a specific fact (Tenant Isolated)."""
-    conn = await engine.get_conn()
-    cursor = await conn.execute(
-        "SELECT project FROM facts WHERE id = ?", (fact_id,)
-    )
-    row = await cursor.fetchone()
-    project = row[0] if row else None
-
-    if not project:
+    fact = await engine.get_fact(fact_id)
+    if not fact:
         raise HTTPException(status_code=404, detail=f"Fact #{fact_id} not found")
-    if project != auth.tenant_id:
+    
+    if fact["project"] != auth.tenant_id:
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    # V2 votes
-    cursor = await conn.execute(
-        """SELECT 'v2' as type, v.vote, v.agent_id as agent, v.created_at, a.reputation_score
-           FROM consensus_votes_v2 v
-           JOIN agents a ON v.agent_id = a.id
-           WHERE v.fact_id = ?""",
-        (fact_id,),
-    )
-    v2_votes = await cursor.fetchall()
-
-    # Legacy votes
-    cursor = await conn.execute(
-        """SELECT 'legacy' as type, vote, agent, timestamp as created_at, 0.0 as reputation_score
-           FROM consensus_votes
-           WHERE fact_id = ?""",
-        (fact_id,),
-    )
-    legacy_votes = await cursor.fetchall()
+    votes = await engine.get_votes(fact_id)
 
     return [
         {
-            "type": r[0],
-            "vote": r[1],
-            "agent": r[2],
-            "timestamp": r[3],
-            "reputation": r[4],
+            "type": r["type"],
+            "vote": r["vote"],
+            "agent": r["agent"],
+            "timestamp": r["created_at"],
+            "reputation": r["reputation_score"],
         }
-        for r in (v2_votes + legacy_votes)
+        for r in votes
     ]
 
 
@@ -229,22 +193,17 @@ async def get_votes(
 async def deprecate_fact(
     fact_id: int,
     auth: AuthResult = Depends(require_permission("write")),
-    engine: CortexEngine = Depends(get_engine),
+    engine: AsyncCortexEngine = Depends(get_async_engine),
 ) -> dict:
     """Soft-deprecate a fact (mark as invalid)."""
-    conn = await engine.get_conn()
-    cursor = await conn.execute(
-        "SELECT project FROM facts WHERE id = ?", (fact_id,)
-    )
-    row = await cursor.fetchone()
-    project = row[0] if row else None
-
-    if not project:
+    fact = await engine.get_fact(fact_id)
+    if not fact:
         raise HTTPException(status_code=404, detail=f"Fact #{fact_id} not found")
-    if project != auth.tenant_id:
+    
+    if fact["project"] != auth.tenant_id:
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    success = await engine.deprecate(fact_id, project)
+    success = await engine.deprecate(fact_id, auth.tenant_id)
     if not success:
         raise HTTPException(status_code=500, detail="Deprecation failed")
 

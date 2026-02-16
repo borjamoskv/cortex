@@ -7,6 +7,22 @@ logger = logging.getLogger("cortex")
 def _migration_010_immutable_ledger(conn: sqlite3.Connection):
     """Add tables for hierarchical immutable ledger (Merkle Roots)."""
     conn.executescript("""
+        CREATE TABLE IF NOT EXISTS vote_ledger (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            fact_id         INTEGER NOT NULL REFERENCES facts(id),
+            agent_id        TEXT NOT NULL, -- references agents(id) effectively
+            vote            INTEGER NOT NULL,
+            vote_weight     REAL NOT NULL,
+            prev_hash       TEXT NOT NULL,
+            hash            TEXT NOT NULL,
+            timestamp       TEXT NOT NULL DEFAULT (datetime('now')),
+            signature       TEXT,
+            UNIQUE(hash)
+        );
+        CREATE INDEX IF NOT EXISTS idx_vote_ledger_fact ON vote_ledger(fact_id);
+        CREATE INDEX IF NOT EXISTS idx_vote_ledger_agent ON vote_ledger(agent_id);
+        CREATE INDEX IF NOT EXISTS idx_vote_ledger_timestamp ON vote_ledger(timestamp);
+
         CREATE TABLE IF NOT EXISTS merkle_roots (
             id              INTEGER PRIMARY KEY AUTOINCREMENT,
             root_hash       TEXT NOT NULL,
@@ -93,4 +109,41 @@ def _migration_012_ghosts_table(conn: sqlite3.Connection):
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_ghosts_project ON ghosts(project)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_ghosts_status ON ghosts(status)")
-    logger.info("Migration 012: Created 'ghosts' table")
+def _migration_014_vote_ledger_refinement(conn: sqlite3.Connection):
+    """Wave 5: Refine Immutable Ledger and sync with Sovereign spec."""
+    # 1. Create vote_ledger if missing (correcting Migration 010 debt)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS vote_ledger (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            fact_id         INTEGER NOT NULL REFERENCES facts(id),
+            agent_id        TEXT NOT NULL,
+            vote            INTEGER NOT NULL,
+            vote_weight     REAL NOT NULL,
+            prev_hash       TEXT NOT NULL,
+            hash            TEXT NOT NULL,
+            timestamp       TEXT NOT NULL DEFAULT (datetime('now')),
+            signature       TEXT,
+            UNIQUE(hash)
+        )
+    """)
+    conn.executescript("""
+        CREATE INDEX IF NOT EXISTS idx_vote_ledger_fact ON vote_ledger(fact_id);
+        CREATE INDEX IF NOT EXISTS idx_vote_ledger_agent ON vote_ledger(agent_id);
+        CREATE INDEX IF NOT EXISTS idx_vote_ledger_timestamp ON vote_ledger(timestamp);
+    """)
+
+    # 2. Create vote_merkle_roots (Wave 5 specific naming)
+    # We keep existing merkle_roots for backwards compatibility or potentially migration later
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS vote_merkle_roots (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            root_hash       TEXT NOT NULL,
+            vote_start_id   INTEGER NOT NULL,
+            vote_end_id     INTEGER NOT NULL,
+            vote_count      INTEGER NOT NULL,
+            created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(root_hash)
+        )
+    """)
+    logger.info("Migration 014: Refined Immutable Ledger (vote_ledger + vote_merkle_roots)")
+

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import sqlite3
 
@@ -11,6 +12,11 @@ from rich.table import Table
 
 from cortex import __version__
 from cortex.cli import DEFAULT_DB, cli, console, get_engine
+
+
+def _run_async(coro):
+    """Helper to run async coroutines from sync CLI."""
+    return asyncio.run(coro)
 
 
 @cli.command()
@@ -27,7 +33,7 @@ def init(db) -> None:
             border_style="green",
         ))
     finally:
-        engine.close()
+        _run_async(engine.close())
 
 
 @cli.command()
@@ -49,7 +55,7 @@ def store(project, content, fact_type, tags, confidence, source, db) -> None:
         )
         console.print(f"[green]✓[/] Stored fact [bold]#{fact_id}[/] in [cyan]{project}[/]")
     finally:
-        engine.close()
+        _run_async(engine.close())
 
 
 @cli.command()
@@ -77,7 +83,7 @@ def search(query, project, top, db) -> None:
             table.add_row(str(r.fact_id), r.project, content, r.fact_type, f"{r.score:.2f}")
         console.print(table)
     finally:
-        engine.close()
+        _run_async(engine.close())
 
 
 @cli.command()
@@ -104,7 +110,7 @@ def recall(project, db) -> None:
                 tags_str = f" [dim]{', '.join(f.tags)}[/]" if f.tags else ""
                 console.print(f"  [dim]#{f.id}[/] {f.content}{tags_str}")
     finally:
-        engine.close()
+        _run_async(engine.close())
 
 
 @cli.command()
@@ -125,7 +131,7 @@ def history(project, as_of, db) -> None:
             status = "[green]●[/]" if f.is_active() else "[red]○[/]"
             console.print(f"  {status} [dim]#{f.id}[/] [{f.valid_from[:10]}] {f.content[:80]}")
     finally:
-        engine.close()
+        _run_async(engine.close())
 
 
 @cli.command()
@@ -161,7 +167,7 @@ def status(db, json_output) -> None:
             table.add_row("By Type", types_str)
         console.print(table)
     finally:
-        engine.close()
+        _run_async(engine.close())
 
 
 @cli.command()
@@ -184,7 +190,7 @@ def migrate(source, db) -> None:
             title="🔄 v3.1 → v4.0 Migration", border_style="green",
         ))
     finally:
-        engine.close()
+        _run_async(engine.close())
 
 
 @cli.command("migrate-graph")
@@ -218,4 +224,5 @@ def migrate_graph(db) -> None:
             title="🧠 Graph Migration", border_style="green",
         ))
     finally:
-        engine.close()
+        _run_async(engine.close())
+

@@ -16,3 +16,15 @@ class DatabaseTransactionError(CortexError):
     This exception sanitizes internal SQLite error details so they are
     never exposed to external callers or API consumers.
     """
+
+
+class FactNotFound(CortexError):
+    """Raised when a fact is not found."""
+
+
+class ProjectNotFound(CortexError):
+    """Raised when a project is not found."""
+
+
+class ThreadPoolExhausted(CortexError):
+    """Raised when thread pool is saturated."""

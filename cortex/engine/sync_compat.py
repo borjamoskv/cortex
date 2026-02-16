@@ -13,6 +13,7 @@ from typing import Optional
 import sqlite_vec
 
 from cortex.temporal import now_iso
+from cortex.engine.models import Fact
 
 logger = logging.getLogger("cortex")
 

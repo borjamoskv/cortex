@@ -15,7 +15,10 @@ from cortex.migrations.mig_ledger import (
     _migration_010_immutable_ledger,
     _migration_011_link_facts_to_tx,
     _migration_012_ghosts_table,
+    _migration_014_vote_ledger_refinement,
 )
+from cortex.migrations.mig_ha import _migration_013_cluster_nodes
+
 
 MIGRATIONS = [
     (1, "Add updated_at column", _migration_001_add_updated_at),
@@ -30,4 +33,7 @@ MIGRATIONS = [
     (10, "Immutable Ledger (Merkle)", _migration_010_immutable_ledger),
     (11, "Link facts to transactions", _migration_011_link_facts_to_tx),
     (12, "Add ghosts table", _migration_012_ghosts_table),
+    (13, "HA Cluster Nodes", _migration_013_cluster_nodes),
+    (14, "Wave 5 Immutable Ledger Refinement", _migration_014_vote_ledger_refinement),
 ]
+

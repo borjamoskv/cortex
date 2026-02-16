@@ -9,10 +9,16 @@ import tempfile
 
 import pytest
 from fastapi.testclient import TestClient
+import cortex.config
+import cortex.api
 
-# Set test DB before importing api
+# Set test DB path
 _test_db = tempfile.mktemp(suffix=".db")
-os.environ["CORTEX_DB"] = _test_db
+
+# PATCH: Override the DB path in both config and api modules 
+# to ensure the TestClient uses the temporary DB, not the user's real DB.
+cortex.config.DB_PATH = _test_db
+cortex.api.DB_PATH = _test_db
 
 from cortex.api import app
 from cortex.auth import AuthManager

@@ -131,3 +131,93 @@ class Neo4jBackend(GraphBackend):
             result = session.run(query, fid=fact_id)
             record = result.single()
             return record["deleted"] > 0 if record else False
+
+    async def find_path(self, source_name: str, target_name: str, max_depth: int = 3) -> list[dict]:
+        if not self._initialized: return []
+        
+        query = f"""
+        MATCH p=shortestPath((s:Entity {{name: $s}})-[*..{max_depth}]-(t:Entity {{name: $t}}))
+        RETURN relationships(p) as rels, nodes(p) as nodes
+        """
+        path_list = []
+        with self.driver.session() as session:
+            result = session.run(query, s=source_name, t=target_name)
+            record = result.single()
+            if record:
+                rels = record["rels"]
+                nodes_in_path = record["nodes"]
+                for i, r in enumerate(rels):
+                    # Neo4j relationship object
+                    path_list.append({
+                        "source": nodes_in_path[i]["name"],
+                        "target": nodes_in_path[i+1]["name"],
+                        "relation": r.type,
+                        "weight": r.get("weight", 1.0)
+                    })
+        return path_list
+
+    async def find_context_subgraph(self, seed_entities: list[str], depth: int = 2, max_nodes: int = 50) -> dict:
+        if not self._initialized: return {"entities": [], "relationships": []}
+
+        # Basic CYPHER expansion
+        # LIMIT is hard to apply to nodes globally in expansion with plain Cypher without APOC,
+        # but we can try a variable length match
+        query = f"""
+        MATCH (s:Entity) WHERE s.name IN $seeds
+        CALL {{
+            WITH s
+            MATCH (s)-[r*1..{depth}]-(m:Entity)
+            RETURN m, r
+            LIMIT {max_nodes}
+        }}
+        RETURN s, m, r
+        """
+        # Note: The above query is approximate and might return multiple rows per path.
+        # A proper subgraph query usually requires APOC or multiple steps.
+        # We'll use a simpler expansion for now: get neighbors 
+        
+        entities_map = {}
+        relationships_list = []
+        
+        with self.driver.session() as session:
+            # 1. Get seeds
+            result = session.run("MATCH (n:Entity) WHERE n.name IN $seeds RETURN n", seeds=seed_entities)
+            for record in result:
+                node = record["n"]
+                entities_map[node.id] = {
+                    "id": node.id, "name": node["name"], "type": node.get("type"), "project": node.get("project")
+                }
+            
+            # 2. Expand (simple 1-hop for now to be safe, or 2-hop loop)
+            current_ids = list(entities_map.keys())
+            for _ in range(depth):
+                if not current_ids: break
+                q_expand = f"""
+                MATCH (a)-[r]-(b)
+                WHERE id(a) IN $ids
+                RETURN a, r, b
+                LIMIT {max_nodes}
+                """
+                res = session.run(q_expand, ids=current_ids)
+                next_ids = []
+                for rec in res:
+                    a, r, b = rec["a"], rec["r"], rec["b"]
+                    if b.id not in entities_map and len(entities_map) < max_nodes:
+                        entities_map[b.id] = {
+                            "id": b.id, "name": b["name"], "type": b.get("type"), "project": b.get("project")
+                        }
+                        next_ids.append(b.id)
+                    
+                    if a.id in entities_map and b.id in entities_map:
+                         relationships_list.append({
+                            "source": a["name"],
+                            "target": b["name"],
+                            "relation": r.type,
+                            "weight": r.get("weight", 1.0)
+                         })
+                current_ids = next_ids
+
+        return {
+            "entities": list(entities_map.values()),
+            "relationships": relationships_list
+        }

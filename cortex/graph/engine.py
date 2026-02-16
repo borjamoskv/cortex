@@ -173,3 +173,26 @@ async def query_entity(
     """
     backend = get_backend(conn)
     return await backend.query_entity(name, project)
+
+
+async def find_path(
+    conn, source: str, target: str, max_depth: int = 3
+) -> list[dict]:
+    """Find meaningful paths between two entities.
+
+    Useful for explaining connections (e.g., "How is Project A related to Library B?").
+    """
+    backend = get_backend(conn)
+    return await backend.find_path(source, target, max_depth)
+
+
+async def get_context_subgraph(
+    conn, seeds: list[str], depth: int = 2, max_nodes: int = 50
+) -> dict:
+    """Retrieve a subgraph context for RAG.
+
+    Given a list of seed entities (e.g. from a user query), expand the graph
+    to find relevant context.
+    """
+    backend = get_backend(conn)
+    return await backend.find_context_subgraph(seeds, depth, max_nodes)

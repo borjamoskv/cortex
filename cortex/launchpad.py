@@ -46,7 +46,8 @@ class MissionOrchestrator:
             "source": "cortex-launchpad"
         }
         
-        fact_id = self.engine.store(**intent_fact)
+        # Use sync method
+        fact_id = self.engine.store_sync(**intent_fact)
         logger.info(f"Recorded mission intent #{fact_id} for project {project}")
 
         # 2. Build the command
@@ -84,7 +85,8 @@ class MissionOrchestrator:
             gate.approve_interactive(action.action_id)
 
             # Close connection to avoid locking if subprocess tries to write to the same DB
-            self.engine.close()
+            # Use sync close
+            self.engine.close_sync()
 
             result = gate.execute_subprocess(
                 action.action_id,
@@ -113,7 +115,8 @@ class MissionOrchestrator:
                 }
             }
             
-            result_id = self.engine.store(**result_fact)
+            # Use sync store
+            result_id = self.engine.store_sync(**result_fact)
             
             return {
                 "intent_id": fact_id,
@@ -134,8 +137,8 @@ class MissionOrchestrator:
     def list_missions(self, project: Optional[str] = None) -> List[Dict[str, Any]]:
         """Retrieve recent mission attempts from the ledger."""
         # Query facts of type 'intent' or 'report' with 'swarm' tag
-        # For simplicity, we use the engine's recall/search or raw SQL
-        conn = self.engine._get_conn()
+        # Use sync connection
+        conn = self.engine._get_sync_conn()
         query = "SELECT id, project, content, created_at, fact_type FROM facts WHERE (fact_type = 'intent' OR fact_type = 'report') AND tags LIKE '%swarm%'"
         params = []
         if project:

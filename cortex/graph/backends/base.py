@@ -31,3 +31,13 @@ class GraphBackend(ABC):
     async def delete_fact_elements(self, fact_id: int) -> bool:
         """Delete all relationships and potentially nodes linked to a fact."""
         pass
+
+    @abstractmethod
+    async def find_path(self, source_name: str, target_name: str, max_depth: int = 3) -> list[dict]:
+        """Find meaningful paths between two entities."""
+        pass
+
+    @abstractmethod
+    async def find_context_subgraph(self, seed_entities: list[str], depth: int = 2, max_nodes: int = 50) -> dict:
+        """Retrieve a subgraph centered around seed entities for RAG context."""
+        pass

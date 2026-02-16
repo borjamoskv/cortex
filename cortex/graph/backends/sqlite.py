@@ -207,3 +207,142 @@ class SQLiteBackend(GraphBackend):
             (fact_id,),
         ) as cursor:
             return cursor.rowcount > 0
+
+    async def get_entity_id(self, name: str) -> Optional[int]:
+        """Helper to resolve name to ID."""
+        async with self.conn.execute(
+            "SELECT id FROM entities WHERE name = ?", (name,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row else None
+
+    async def find_path(self, source_name: str, target_name: str, max_depth: int = 3) -> list[dict]:
+        """Find meaningful paths (BFS) between two entities."""
+        start_id = await self.get_entity_id(source_name)
+        end_id = await self.get_entity_id(target_name)
+        if not start_id or not end_id:
+            return []
+
+        # Simple BFS
+        queue = [(start_id, [])]  # (current_node_id, path_of_edges)
+        visited = {start_id}
+        
+        while queue:
+            current_id, path = queue.pop(0)
+            if current_id == end_id:
+                # Found path! Resolve edges to dictionaries
+                resolved_path = []
+                for edge_id in path:
+                    async with self.conn.execute(
+                        """SELECT e1.name, er.relation_type, e2.name, er.weight 
+                           FROM entity_relations er
+                           JOIN entities e1 ON er.source_entity_id = e1.id
+                           JOIN entities e2 ON er.target_entity_id = e2.id
+                           WHERE er.id = ?""",
+                        (edge_id,),
+                    ) as cursor:
+                        row = await cursor.fetchone()
+                        if row:
+                            resolved_path.append({
+                                "source": row[0],
+                                "relation": row[1],
+                                "target": row[2],
+                                "weight": row[3]
+                            })
+                return resolved_path
+
+            if len(path) >= max_depth:
+                continue
+
+            async with self.conn.execute(
+                "SELECT id, target_entity_id FROM entity_relations WHERE source_entity_id = ?",
+                (current_id,),
+            ) as cursor:
+                async for row in cursor:
+                    edge_id, neighbor_id = row
+                    if neighbor_id not in visited:
+                        visited.add(neighbor_id)
+                        queue.append((neighbor_id, path + [edge_id]))
+                        
+            # Bidirectional check? For now, directed.
+
+        return []
+
+    async def find_context_subgraph(self, seed_entities: list[str], depth: int = 2, max_nodes: int = 50) -> dict:
+        """Retrieve neighborhood subgraph (RAG context)."""
+        nodes = {}
+        edges = []
+        visited_ids = set()
+        
+        # Resolve seeds to IDs
+        current_layer_ids = []
+        for name in seed_entities:
+            eid = await self.get_entity_id(name)
+            if eid:
+                current_layer_ids.append(eid)
+                async with self.conn.execute("SELECT * FROM entities WHERE id = ?", (eid,)) as cursor:
+                    row = await cursor.fetchone()
+                    if row:
+                        nodes[eid] = {
+                            "id": row[0], "name": row[1], "type": row[2], "project": row[3]
+                        }
+                visited_ids.add(eid)
+
+        for _ in range(depth):
+            if not current_layer_ids or len(nodes) >= max_nodes:
+                break
+            
+            next_layer_ids = []
+            placeholders = ",".join("?" * len(current_layer_ids))
+            
+            # Find all outgoing/incoming edges from current layer
+            query = f"""
+                SELECT id, source_entity_id, target_entity_id, relation_type, weight
+                FROM entity_relations
+                WHERE source_entity_id IN ({placeholders})
+                OR target_entity_id IN ({placeholders})
+                ORDER BY weight DESC LIMIT 50
+            """
+            # Need to pass list twice for source OR target
+            params = current_layer_ids + current_layer_ids
+            
+            async with self.conn.execute(query, params) as cursor:
+                rows = await cursor.fetchall()
+                
+            for row in rows:
+                rel_id, sid, tid, rtype, weight = row
+                
+                # Identify the new node (the one not in current_layer, or generally likely unvisited)
+                neighbor_id = tid if sid in current_layer_ids else sid
+                
+                if neighbor_id not in visited_ids and len(nodes) < max_nodes:
+                    visited_ids.add(neighbor_id)
+                    next_layer_ids.append(neighbor_id)
+                    
+                    # Fetch node details
+                    async with self.conn.execute("SELECT * FROM entities WHERE id = ?", (neighbor_id,)) as node_cursor:
+                        node_row = await node_cursor.fetchone()
+                        if node_row:
+                            nodes[neighbor_id] = {
+                                "id": node_row[0], "name": node_row[1], "type": node_row[2], "project": node_row[3]
+                            }
+                
+                # Add edge if both nodes are now known
+                if sid in nodes and tid in nodes:
+                    edge_key = f"{sid}-{tid}-{rtype}"
+                    # Avoid duplicate edges
+                    if not any(e["id"] == rel_id for e in edges):
+                        edges.append({
+                            "id": rel_id,
+                            "source": nodes[sid]["name"],
+                            "target": nodes[tid]["name"],
+                            "relation": rtype,
+                            "weight": weight
+                        })
+            
+            current_layer_ids = next_layer_ids
+
+        return {
+            "entities": list(nodes.values()),
+            "relationships": edges
+        }

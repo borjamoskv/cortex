@@ -4,6 +4,7 @@ import sys
 
 BASE_URL = "http://127.0.0.1:8000"
 
+
 def test_rate_limit():
     print("Testing Rate Limit...")
     # Hit status endpoint repeatedly
@@ -21,27 +22,25 @@ def test_rate_limit():
         except Exception as e:
             print(f"Request failed: {e}")
             break
-            
+
     end = time.time()
-    print(f"Sent {success+blocked} requests in {end-start:.2f}s")
+    print(f"Sent {success + blocked} requests in {end - start:.2f}s")
     print(f"Success: {success}, Blocked: {blocked}")
-    
+
     if blocked > 0:
         print("✅ Rate Limiting works!")
     else:
         print("❌ Rate Limiting failed (or limit too high)")
 
+
 def test_cors():
     print("\nTesting CORS...")
-    headers = {
-        "Origin": "http://evil-site.com",
-        "Access-Control-Request-Method": "GET"
-    }
+    headers = {"Origin": "http://evil-site.com", "Access-Control-Request-Method": "GET"}
     r = requests.options(f"{BASE_URL}/v1/status", headers=headers)
     print(f"Status: {r.status_code}")
     allow_origin = r.headers.get("Access-Control-Allow-Origin")
     print(f"Allow-Origin: {allow_origin}")
-    
+
     if allow_origin is None or allow_origin != "http://evil-site.com":
         print("✅ CORS protects against evil-site.com (Origin not reflected)")
     else:
@@ -56,6 +55,7 @@ def test_cors():
     else:
         print(f"❌ CORS failed for localhost:3000 (got {allow_origin})")
 
+
 if __name__ == "__main__":
     try:
         # verify server is up
@@ -63,9 +63,9 @@ if __name__ == "__main__":
         if r.status_code != 200:
             print(f"Server returned {r.status_code}")
             sys.exit(1)
-            
+
         test_cors()
         test_rate_limit()
-        
+
     except requests.exceptions.ConnectionError:
         print("❌ Server not running on port 8000")

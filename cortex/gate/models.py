@@ -1,12 +1,6 @@
-# This file is part of CORTEX.
-# Licensed under the Business Source License 1.1 (BSL 1.1).
-# See top-level LICENSE file for details.
-# Change Date: 2030-01-01 (Transitions to Apache 2.0)
-
-"""Gate models and enums."""
-from __future__ import annotations
-
-import json
+"""
+CORTEX v4.0 — SovereignGate Models.
+"""
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -16,6 +10,7 @@ from typing import Any, Dict, List, Optional
 
 class ActionLevel(str, Enum):
     """Consciousness layer action levels."""
+
     L1_READ = "L1_READ"
     L2_PLAN = "L2_PLAN"
     L3_EXECUTE = "L3_EXECUTE"
@@ -24,13 +19,15 @@ class ActionLevel(str, Enum):
 
 class GatePolicy(str, Enum):
     """Gate enforcement policy."""
-    ENFORCE = "enforce"       # Block until approved
-    AUDIT_ONLY = "audit"      # Log but don't block
-    DISABLED = "disabled"     # Transparent passthrough
+
+    ENFORCE = "enforce"  # Block until approved
+    AUDIT_ONLY = "audit"  # Log but don't block
+    DISABLED = "disabled"  # Transparent passthrough
 
 
 class ActionStatus(str, Enum):
     """Status of a pending action."""
+
     PENDING = "pending"
     APPROVED = "approved"
     DENIED = "denied"
@@ -41,6 +38,7 @@ class ActionStatus(str, Enum):
 @dataclass
 class PendingAction:
     """An L3 action awaiting operator approval."""
+
     action_id: str
     level: ActionLevel
     description: str
@@ -68,12 +66,11 @@ class PendingAction:
             "command": self.command,
             "project": self.project,
             "status": self.status.value,
-            "created_at": datetime.fromtimestamp(
-                self.created_at, tz=timezone.utc
-            ).isoformat(),
+            "created_at": datetime.fromtimestamp(self.created_at, tz=timezone.utc).isoformat(),
             "approved_at": (
                 datetime.fromtimestamp(self.approved_at, tz=timezone.utc).isoformat()
-                if self.approved_at else None
+                if self.approved_at
+                else None
             ),
             "operator_id": self.operator_id,
         }

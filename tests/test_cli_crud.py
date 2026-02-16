@@ -4,7 +4,6 @@ Tests for CLI CRUD commands — delete, list, edit.
 
 from __future__ import annotations
 
-import json
 
 import pytest
 from click.testing import CliRunner
@@ -68,9 +67,7 @@ class TestDeleteCommand:
         # Monkeypatch sync paths to avoid touching real files
         monkeypatch.setattr("cortex.sync.MEMORY_DIR", tmp_path / "memory")
         monkeypatch.setattr("cortex.sync.CORTEX_DIR", tmp_path)
-        monkeypatch.setattr(
-            "cortex.sync.SYNC_STATE_FILE", tmp_path / "sync_state.json"
-        )
+        monkeypatch.setattr("cortex.sync.SYNC_STATE_FILE", tmp_path / "sync_state.json")
 
         result = runner.invoke(cli, ["delete", "1", "--db", db_path])
         assert result.exit_code == 0
@@ -84,9 +81,7 @@ class TestDeleteCommand:
     def test_delete_with_reason(self, runner, db_path, monkeypatch, tmp_path):
         monkeypatch.setattr("cortex.sync.MEMORY_DIR", tmp_path / "memory")
         monkeypatch.setattr("cortex.sync.CORTEX_DIR", tmp_path)
-        monkeypatch.setattr(
-            "cortex.sync.SYNC_STATE_FILE", tmp_path / "sync_state.json"
-        )
+        monkeypatch.setattr("cortex.sync.SYNC_STATE_FILE", tmp_path / "sync_state.json")
 
         result = runner.invoke(cli, ["delete", "1", "-r", "testing", "--db", db_path])
         assert result.exit_code == 0
@@ -99,20 +94,14 @@ class TestEditCommand:
     def test_edit_existing_fact(self, runner, db_path, monkeypatch, tmp_path):
         monkeypatch.setattr("cortex.sync.MEMORY_DIR", tmp_path / "memory")
         monkeypatch.setattr("cortex.sync.CORTEX_DIR", tmp_path)
-        monkeypatch.setattr(
-            "cortex.sync.SYNC_STATE_FILE", tmp_path / "sync_state.json"
-        )
+        monkeypatch.setattr("cortex.sync.SYNC_STATE_FILE", tmp_path / "sync_state.json")
 
-        result = runner.invoke(
-            cli, ["edit", "1", "Updated content here", "--db", db_path]
-        )
+        result = runner.invoke(cli, ["edit", "1", "Updated content here", "--db", db_path])
         assert result.exit_code == 0
         assert "editado" in result.output
 
     def test_edit_nonexistent_fact(self, runner, db_path):
-        result = runner.invoke(
-            cli, ["edit", "999", "New content", "--db", db_path]
-        )
+        result = runner.invoke(cli, ["edit", "999", "New content", "--db", db_path])
         assert result.exit_code == 0
         assert "No se encontró" in result.output
 
@@ -120,17 +109,11 @@ class TestEditCommand:
         """Edit should preserve project, type, tags from original."""
         monkeypatch.setattr("cortex.sync.MEMORY_DIR", tmp_path / "memory")
         monkeypatch.setattr("cortex.sync.CORTEX_DIR", tmp_path)
-        monkeypatch.setattr(
-            "cortex.sync.SYNC_STATE_FILE", tmp_path / "sync_state.json"
-        )
+        monkeypatch.setattr("cortex.sync.SYNC_STATE_FILE", tmp_path / "sync_state.json")
 
-        result = runner.invoke(
-            cli, ["edit", "1", "Edited content", "--db", db_path]
-        )
+        result = runner.invoke(cli, ["edit", "1", "Edited content", "--db", db_path])
         assert result.exit_code == 0
 
         # Verify the new fact exists with list
-        list_result = runner.invoke(
-            cli, ["list", "--db", db_path, "-p", "test-project"]
-        )
+        list_result = runner.invoke(cli, ["list", "--db", db_path, "-p", "test-project"])
         assert "Edited content" in list_result.output

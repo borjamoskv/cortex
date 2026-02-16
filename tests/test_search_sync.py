@@ -5,7 +5,6 @@ Tests for semantic_search_sync, text_search_sync, hybrid_search_sync,
 and the CortexEngine.search_sync() integration method.
 """
 
-import json
 import os
 import tempfile
 
@@ -32,7 +31,9 @@ def search_engine():
     # Insert test data with embeddings via store_sync
     eng.store_sync("alpha", "Python is great for machine learning", fact_type="knowledge")
     eng.store_sync("alpha", "Use pytest for testing Python code", fact_type="decision")
-    eng.store_sync("beta", "Rust offers memory safety without garbage collection", fact_type="knowledge")
+    eng.store_sync(
+        "beta", "Rust offers memory safety without garbage collection", fact_type="knowledge"
+    )
     eng.store_sync("beta", "Docker containers simplify deployment", fact_type="knowledge")
     eng.store_sync("gamma", "Neural networks require training data", fact_type="knowledge")
 
@@ -59,6 +60,7 @@ def no_vec_engine():
 
 
 # ── Text Search Sync ──────────────────────────────────────
+
 
 class TestTextSearchSync:
     def test_finds_matching_content(self, search_engine):
@@ -101,6 +103,7 @@ class TestTextSearchSync:
 
 # ── Semantic Search Sync ──────────────────────────────────
 
+
 class TestSemanticSearchSync:
     def test_finds_semantically_similar(self, search_engine):
         """Vector search should find 'machine learning' when querying 'AI'."""
@@ -139,6 +142,7 @@ class TestSemanticSearchSync:
 
 # ── Hybrid Search Sync ────────────────────────────────────
 
+
 class TestHybridSearchSync:
     def test_combines_both_methods(self, search_engine):
         if not search_engine._vec_available:
@@ -158,12 +162,17 @@ class TestHybridSearchSync:
         conn = search_engine._get_sync_conn()
         embedding = search_engine._get_embedder().embed("Python")
         results = hybrid_search_sync(
-            conn, "Python", embedding, top_k=5, project="alpha",
+            conn,
+            "Python",
+            embedding,
+            top_k=5,
+            project="alpha",
         )
         assert all(r.project == "alpha" for r in results)
 
 
 # ── Engine Integration ────────────────────────────────────
+
 
 class TestEngineSearchSync:
     def test_search_sync_returns_results(self, search_engine):

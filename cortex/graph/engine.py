@@ -2,6 +2,7 @@
 
 Extraction, relationship detection, and backend orchestration.
 """
+
 import logging
 from typing import Optional
 
@@ -53,14 +54,16 @@ def detect_relationships(content: str, entities: list[dict]) -> list[dict]:
         if detected_relation != "related_to":
             break
     for i, source in enumerate(entities):
-        for target in entities[i + 1:]:
+        for target in entities[i + 1 :]:
             if source["name"].lower() == target["name"].lower():
                 continue
-            relationships.append({
-                "source_name": source["name"],
-                "target_name": target["name"],
-                "relation_type": detected_relation,
-            })
+            relationships.append(
+                {
+                    "source_name": source["name"],
+                    "target_name": target["name"],
+                    "relation_type": detected_relation,
+                }
+            )
     return relationships
 
 
@@ -81,16 +84,14 @@ async def process_fact_graph(
         entity_ids: dict[str, int] = {}
         for ent in entities:
             cursor = await conn.execute(
-                "SELECT id, mention_count FROM entities "
-                "WHERE name = ? AND project = ?",
+                "SELECT id, mention_count FROM entities WHERE name = ? AND project = ?",
                 (ent["name"], project),
             )
             row = await cursor.fetchone()
             if row:
                 entity_id, count = row
                 await conn.execute(
-                    "UPDATE entities SET mention_count = ?, last_seen = ? "
-                    "WHERE id = ?",
+                    "UPDATE entities SET mention_count = ?, last_seen = ? WHERE id = ?",
                     (count + 1, timestamp, entity_id),
                 )
             else:
@@ -117,8 +118,7 @@ async def process_fact_graph(
             if row:
                 rel_id, weight = row
                 await conn.execute(
-                    "UPDATE entity_relations SET weight = ?, relation_type = ? "
-                    "WHERE id = ?",
+                    "UPDATE entity_relations SET weight = ?, relation_type = ? WHERE id = ?",
                     (weight + 0.5, rel["relation_type"], rel_id),
                 )
             else:
@@ -135,9 +135,7 @@ async def process_fact_graph(
             try:
                 neo = Neo4jBackend()
                 for ent in entities:
-                    neo.upsert_entity(
-                        ent["name"], ent["entity_type"], project, timestamp
-                    )
+                    neo.upsert_entity(ent["name"], ent["entity_type"], project, timestamp)
             except Exception as e:
                 logger.warning("Neo4j dual-write failed: %s", e)
 
@@ -160,9 +158,7 @@ def process_fact_graph_sync(
         backend = get_backend(conn)
         entity_ids: dict[str, int] = {}
         for ent in entities:
-            eid = backend.upsert_entity_sync(
-                ent["name"], ent["entity_type"], project, timestamp
-            )
+            eid = backend.upsert_entity_sync(ent["name"], ent["entity_type"], project, timestamp)
             entity_ids[ent["name"]] = eid
 
         for rel in relationships:
@@ -178,11 +174,7 @@ def process_fact_graph_sync(
         return 0, 0
 
 
-
-
-async def get_graph(
-    conn, project: Optional[str] = None, limit: int = 50
-) -> dict:
+async def get_graph(conn, project: Optional[str] = None, limit: int = 50) -> dict:
     """Get graph data for a project or all projects.
 
     Args:
@@ -194,19 +186,13 @@ async def get_graph(
     return await backend.get_graph(project, limit)
 
 
-def get_graph_sync(
-    conn, project: Optional[str] = None, limit: int = 50
-) -> dict:
+def get_graph_sync(conn, project: Optional[str] = None, limit: int = 50) -> dict:
     """Get graph data synchronously."""
     backend = get_backend(conn)
     return backend.get_graph_sync(project, limit)
 
 
-
-
-async def query_entity(
-    conn, name: str, project: Optional[str] = None
-) -> Optional[dict]:
+async def query_entity(conn, name: str, project: Optional[str] = None) -> Optional[dict]:
     """Query a specific entity by name.
 
     Args:
@@ -218,19 +204,13 @@ async def query_entity(
     return await backend.query_entity(name, project)
 
 
-def query_entity_sync(
-    conn, name: str, project: Optional[str] = None
-) -> Optional[dict]:
+def query_entity_sync(conn, name: str, project: Optional[str] = None) -> Optional[dict]:
     """Query entity synchronously."""
     backend = get_backend(conn)
     return backend.query_entity_sync(name, project)
 
 
-
-
-async def find_path(
-    conn, source: str, target: str, max_depth: int = 3
-) -> list[dict]:
+async def find_path(conn, source: str, target: str, max_depth: int = 3) -> list[dict]:
     """Find meaningful paths between two entities.
 
     Useful for explaining connections (e.g., "How is Project A related to Library B?").
@@ -239,9 +219,7 @@ async def find_path(
     return await backend.find_path(source, target, max_depth)
 
 
-async def get_context_subgraph(
-    conn, seeds: list[str], depth: int = 2, max_nodes: int = 50
-) -> dict:
+async def get_context_subgraph(conn, seeds: list[str], depth: int = 2, max_nodes: int = 50) -> dict:
     """Retrieve a subgraph context for RAG.
 
     Given a list of seed entities (e.g. from a user query), expand the graph

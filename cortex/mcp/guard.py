@@ -9,6 +9,7 @@ Validates all inputs to MCP tools against safety constraints:
 An agent calling store() with malicious data will be rejected
 before it touches the database.
 """
+
 from __future__ import annotations
 
 import logging
@@ -74,27 +75,30 @@ class MCPGuard:
             raise ValueError("content cannot be empty")
         if len(content) > cls.max_content_length:
             raise ValueError(
-                f"content exceeds max length "
-                f"({len(content):,} > {cls.max_content_length:,} chars)"
+                f"content exceeds max length ({len(content):,} > {cls.max_content_length:,} chars)"
             )
 
         # Fact type
         allowed_types = {
-            "knowledge", "decision", "error", "rule", "axiom",
-            "schema", "idea", "ghost", "bridge",
+            "knowledge",
+            "decision",
+            "error",
+            "rule",
+            "axiom",
+            "schema",
+            "idea",
+            "ghost",
+            "bridge",
         }
         if fact_type not in allowed_types:
             raise ValueError(
-                f"invalid fact_type '{fact_type}'. "
-                f"Allowed: {', '.join(sorted(allowed_types))}"
+                f"invalid fact_type '{fact_type}'. Allowed: {', '.join(sorted(allowed_types))}"
             )
 
         # Tags
         if tags:
             if len(tags) > cls.max_tags_count:
-                raise ValueError(
-                    f"too many tags ({len(tags)} > {cls.max_tags_count})"
-                )
+                raise ValueError(f"too many tags ({len(tags)} > {cls.max_tags_count})")
             for tag in tags:
                 if not isinstance(tag, str) or len(tag) > 128:
                     raise ValueError(f"invalid tag: {tag!r}")
@@ -116,8 +120,7 @@ class MCPGuard:
             raise ValueError("search query cannot be empty")
         if len(query) > cls.max_query_length:
             raise ValueError(
-                f"query exceeds max length "
-                f"({len(query):,} > {cls.max_query_length:,} chars)"
+                f"query exceeds max length ({len(query):,} > {cls.max_query_length:,} chars)"
             )
 
     @classmethod
@@ -128,8 +131,6 @@ class MCPGuard:
         """
         for pattern in _POISON_PATTERNS:
             if pattern.search(content):
-                logger.debug(
-                    "Poison pattern matched: %s", pattern.pattern
-                )
+                logger.debug("Poison pattern matched: %s", pattern.pattern)
                 return True
         return False

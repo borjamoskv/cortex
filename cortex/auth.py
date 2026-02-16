@@ -21,7 +21,6 @@ logger = logging.getLogger(__name__)
 
 # ─── Config ───────────────────────────────────────────────────────────
 
-from cortex.config import DB_PATH
 
 _auth_manager: Optional[AuthManager] = None
 
@@ -29,10 +28,12 @@ _auth_manager: Optional[AuthManager] = None
 def get_auth_manager() -> AuthManager:
     """Lazy-load the global AuthManager instance."""
     from cortex.config import DB_PATH
+
     global _auth_manager
     if _auth_manager is None:
         _auth_manager = AuthManager(DB_PATH)
     return _auth_manager
+
 
 # ─── Schema ───────────────────────────────────────────────────────────
 
@@ -58,6 +59,7 @@ CREATE INDEX IF NOT EXISTS idx_api_keys_tenant ON api_keys(tenant_id);
 @dataclass
 class APIKey:
     """Represents an API key with its metadata."""
+
     id: int
     name: str
     key_prefix: str
@@ -72,6 +74,7 @@ class APIKey:
 @dataclass
 class AuthResult:
     """Result of an authentication attempt."""
+
     authenticated: bool
     tenant_id: str = "default"
     permissions: list[str] = field(default_factory=list)
@@ -192,9 +195,7 @@ class AuthManager:
         """Revoke an API key by ID."""
         conn = self._get_conn()
         try:
-            cursor = conn.execute(
-                "UPDATE api_keys SET is_active = 0 WHERE id = ?", (key_id,)
-            )
+            cursor = conn.execute("UPDATE api_keys SET is_active = 0 WHERE id = ?", (key_id,))
             conn.commit()
             return cursor.rowcount > 0
         finally:
@@ -210,9 +211,7 @@ class AuthManager:
                     (tenant_id,),
                 ).fetchall()
             else:
-                rows = conn.execute(
-                    "SELECT * FROM api_keys ORDER BY created_at DESC"
-                ).fetchall()
+                rows = conn.execute("SELECT * FROM api_keys ORDER BY created_at DESC").fetchall()
 
             return [
                 APIKey(

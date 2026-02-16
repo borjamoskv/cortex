@@ -14,13 +14,7 @@ Covers:
 
 from __future__ import annotations
 
-import json
 import sqlite3
-import sys
-from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -33,6 +27,7 @@ class TestSearchDefensiveJson:
 
     def setup_method(self):
         from cortex.engine import CortexEngine
+
         self.engine = CortexEngine(db_path=":memory:")
         self.engine.init_db()
         self.conn = self.engine.get_connection()
@@ -55,7 +50,7 @@ class TestSearchDefensiveJson:
         """text_search should return results even with broken JSON in tags."""
         from cortex.search import text_search
 
-        self._insert_fact_with_bad_json("important finding", "NOT_JSON", '{}')
+        self._insert_fact_with_bad_json("important finding", "NOT_JSON", "{}")
         results = text_search(self.conn, "important")
         assert len(results) == 1
         assert results[0].tags == []  # Gracefully defaulted
@@ -64,7 +59,7 @@ class TestSearchDefensiveJson:
         """text_search should return results even with broken JSON in meta."""
         from cortex.search import text_search
 
-        self._insert_fact_with_bad_json("key data", '[]', 'BROKEN_META')
+        self._insert_fact_with_bad_json("key data", "[]", "BROKEN_META")
         results = text_search(self.conn, "key data")
         assert len(results) == 1
         assert results[0].meta == {}  # Gracefully defaulted
@@ -222,10 +217,11 @@ class TestTimingSafeJson:
 
     def setup_method(self):
         from cortex.timing import TimingTracker
+
         self.tracker = TimingTracker.__new__(TimingTracker)
 
     def test_safe_json_list_valid(self):
-        assert self.tracker._safe_json_list('[1, 2, 3]') == [1, 2, 3]
+        assert self.tracker._safe_json_list("[1, 2, 3]") == [1, 2, 3]
 
     def test_safe_json_list_none(self):
         assert self.tracker._safe_json_list(None) == []
@@ -254,7 +250,7 @@ class TestTimingSafeJson:
 
     def test_safe_json_dict_wrong_type(self):
         """Returns {} if JSON is valid but not a dict."""
-        assert self.tracker._safe_json_dict('[1, 2]') == {}
+        assert self.tracker._safe_json_dict("[1, 2]") == {}
 
 
 # ──────────────────────────────────────────────────────────────────────

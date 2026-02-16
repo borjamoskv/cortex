@@ -14,38 +14,49 @@ Output: notebooks/cortex_notebooklm.ipynb
 
 import json, textwrap
 
+
 def cell_md(lines: str):
     return {"cell_type": "markdown", "metadata": {}, "source": lines.split("\n")}
 
+
 def cell_code(lines: str):
-    return {"cell_type": "code", "execution_count": None, "metadata": {},
-            "outputs": [], "source": textwrap.dedent(lines).strip().split("\n")}
+    return {
+        "cell_type": "code",
+        "execution_count": None,
+        "metadata": {},
+        "outputs": [],
+        "source": textwrap.dedent(lines).strip().split("\n"),
+    }
+
 
 cells = []
 
 # ── 0. Title ──────────────────────────────────────────────────────────
-cells.append(cell_md(
-"# 🧠 CORTEX v4.0 → NotebookLM Bridge\n"
-"\n"
-"Extrae, visualiza y aplana el **grafo de conocimiento CORTEX** en un\n"
-"*Master Digest* Markdown optimizado para Google NotebookLM.\n"
-"\n"
-"### Tablas cubiertas\n"
-"| Tabla | Rol |\n"
-"|---|---|\n"
-"| `facts` | Hechos, decisiones, aprendizajes |\n"
-"| `agents` | Agentes del Swarm + reputación |\n"
-"| `consensus_votes_v2` | Votos ponderados por reputación |\n"
-"| `trust_edges` | Grafo de confianza inter-agente |\n"
-"| `sessions` | Sesiones de trabajo |\n"
-"| `transactions` | Ledger append-only hash-chained |\n"
-"| `heartbeats` | Pulsos de actividad |\n"
-"| `entities` / `entity_relations` | Entidades extraídas + relaciones |\n"
-))
+cells.append(
+    cell_md(
+        "# 🧠 CORTEX v4.0 → NotebookLM Bridge\n"
+        "\n"
+        "Extrae, visualiza y aplana el **grafo de conocimiento CORTEX** en un\n"
+        "*Master Digest* Markdown optimizado para Google NotebookLM.\n"
+        "\n"
+        "### Tablas cubiertas\n"
+        "| Tabla | Rol |\n"
+        "|---|---|\n"
+        "| `facts` | Hechos, decisiones, aprendizajes |\n"
+        "| `agents` | Agentes del Swarm + reputación |\n"
+        "| `consensus_votes_v2` | Votos ponderados por reputación |\n"
+        "| `trust_edges` | Grafo de confianza inter-agente |\n"
+        "| `sessions` | Sesiones de trabajo |\n"
+        "| `transactions` | Ledger append-only hash-chained |\n"
+        "| `heartbeats` | Pulsos de actividad |\n"
+        "| `entities` / `entity_relations` | Entidades extraídas + relaciones |\n"
+    )
+)
 
 # ── 1. Connect ────────────────────────────────────────────────────────
 cells.append(cell_md("## 1. Conexión a la Matriz"))
-cells.append(cell_code("""
+cells.append(
+    cell_code("""
     import sqlite3
     import pandas as pd
     import json
@@ -75,11 +86,13 @@ cells.append(cell_code("""
             print(f"  {name:20s} → {n:,}")
         except Exception:
             print(f"  {name:20s} → (tabla no existe)")
-"""))
+""")
+)
 
 # ── 2. DataFrames ─────────────────────────────────────────────────────
 cells.append(cell_md("## 2. Extracción de Datos"))
-cells.append(cell_code("""
+cells.append(
+    cell_code("""
     df_facts = pd.read_sql_query(
         "SELECT * FROM facts WHERE valid_until IS NULL ORDER BY project, created_at DESC",
         conn
@@ -103,14 +116,18 @@ cells.append(cell_code("""
     for p in projects:
         cnt = len(df_facts[df_facts["project"] == p])
         print(f"   • {p} ({cnt} facts)")
-"""))
+""")
+)
 
 # ── 3. Knowledge Graph ────────────────────────────────────────────────
-cells.append(cell_md(
-    "## 3. Visualización Topológica del Grafo de Conocimiento\n"
-    "Rojo = Proyectos (hubs) · Azul = Facts · Verde = Agentes · Naranja = Entidades"
-))
-cells.append(cell_code("""
+cells.append(
+    cell_md(
+        "## 3. Visualización Topológica del Grafo de Conocimiento\n"
+        "Rojo = Proyectos (hubs) · Azul = Facts · Verde = Agentes · Naranja = Entidades"
+    )
+)
+cells.append(
+    cell_code("""
     import networkx as nx
     import matplotlib.pyplot as plt
     import matplotlib
@@ -165,11 +182,13 @@ cells.append(cell_code("""
     plt.savefig("cortex_knowledge_graph.png", dpi=150, bbox_inches="tight")
     plt.show()
     print("📸 Grafo guardado como cortex_knowledge_graph.png")
-"""))
+""")
+)
 
 # ── 4. Consensus Heatmap ──────────────────────────────────────────────
 cells.append(cell_md("## 4. Mapa de Calor — Reputación de Agentes y Votos"))
-cells.append(cell_code("""
+cells.append(
+    cell_code("""
     if not df_agents.empty and "reputation_score" in df_agents.columns:
         fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
@@ -191,11 +210,13 @@ cells.append(cell_code("""
         plt.show()
     else:
         print("ℹ️ No hay datos de agentes/reputación para visualizar")
-"""))
+""")
+)
 
 # ── 5. Activity Timeline ─────────────────────────────────────────────
 cells.append(cell_md("## 5. Timeline de Actividad (Heartbeats)"))
-cells.append(cell_code("""
+cells.append(
+    cell_code("""
     hb_query = "SELECT date(timestamp) as day, project, COUNT(*) as pulses FROM heartbeats GROUP BY day, project ORDER BY day"
     df_hb = pd.read_sql_query(hb_query, conn)
 
@@ -212,15 +233,19 @@ cells.append(cell_code("""
         plt.show()
     else:
         print("ℹ️ Sin heartbeats registrados")
-"""))
+""")
+)
 
 # ── 6. Master Digest Generator ───────────────────────────────────────
-cells.append(cell_md(
-    "## 6. 🎯 Generación del Master Digest para NotebookLM\n"
-    "Transforma toda la base relacional en un Markdown narrativo jerárquico\n"
-    "optimizado para RAG."
-))
-cells.append(cell_code("""
+cells.append(
+    cell_md(
+        "## 6. 🎯 Generación del Master Digest para NotebookLM\n"
+        "Transforma toda la base relacional en un Markdown narrativo jerárquico\n"
+        "optimizado para RAG."
+    )
+)
+cells.append(
+    cell_code("""
     def generate_master_digest():
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         doc = []
@@ -329,14 +354,17 @@ cells.append(cell_code("""
     print(f"   2. Crea un cuaderno 'CORTEX Brain'")
     print(f"   3. Sube '{MASTER_FILE}' como fuente")
     print(f"   4. ¡Dale a 'Generate Audio Overview'! 🎧")
-"""))
+""")
+)
 
 # ── 7. Close ──────────────────────────────────────────────────────────
 cells.append(cell_md("## 7. Limpieza"))
-cells.append(cell_code("""
+cells.append(
+    cell_code("""
     conn.close()
     print("🔌 Conexión cerrada. ¡A NotebookLM!")
-"""))
+""")
+)
 
 # ── Assemble notebook ────────────────────────────────────────────────
 notebook = {
@@ -345,9 +373,12 @@ notebook = {
         "kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},
         "language_info": {
             "codemirror_mode": {"name": "ipython", "version": 3},
-            "file_extension": ".py", "mimetype": "text/x-python",
-            "name": "python", "nbformat_minor": 4,
-            "pygments_lexer": "ipython3", "version": "3.11.0",
+            "file_extension": ".py",
+            "mimetype": "text/x-python",
+            "name": "python",
+            "nbformat_minor": 4,
+            "pygments_lexer": "ipython3",
+            "version": "3.11.0",
         },
     },
     "nbformat": 4,
@@ -355,6 +386,7 @@ notebook = {
 }
 
 from pathlib import Path as _Path
+
 out_path = _Path("notebooks/cortex_notebooklm.ipynb")
 out_path.parent.mkdir(exist_ok=True)
 with open(out_path, "w", encoding="utf-8") as f:

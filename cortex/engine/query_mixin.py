@@ -1,4 +1,5 @@
 """Query mixin — search, recall, history, reconstruct_state, stats."""
+
 from __future__ import annotations
 
 import logging
@@ -6,7 +7,7 @@ from typing import Optional
 
 from cortex.engine.models import Fact
 from cortex.search import SearchResult, semantic_search, text_search
-from cortex.temporal import build_temporal_filter_params, now_iso, time_travel_filter
+from cortex.temporal import build_temporal_filter_params, time_travel_filter
 
 logger = logging.getLogger("cortex")
 
@@ -24,23 +25,38 @@ class QueryMixin:
         self,
         query: str,
         project: Optional[str] = None,
-        top_k: int = 5,
-        as_of: Optional[str] = None,
+        graph_depth: int = 0,
         **kwargs,
     ) -> list[SearchResult]:
         if not query or not query.strip():
             raise ValueError("query cannot be empty")
-        
+
+        from cortex.graph import extract_entities, get_context_subgraph
+
         async with self.session() as conn:
+            results = []
             try:
                 results = await semantic_search(
-                    conn, self._get_embedder().embed(query), top_k, project, as_of,
+                    conn,
+                    self._get_embedder().embed(query),
+                    top_k,
+                    project,
+                    as_of,
                 )
-                if results:
-                    return results
             except Exception as e:
                 logger.warning("Semantic search failed: %s", e)
-            return await text_search(conn, query, project, limit=top_k, **kwargs)
+            
+            if not results:
+                results = await text_search(conn, query, project, limit=top_k, **kwargs)
+
+            if results and graph_depth > 0:
+                for res in results:
+                    entities = extract_entities(res.content)
+                    seeds = [e["name"] for e in entities]
+                    if seeds:
+                        res.graph_context = await get_context_subgraph(conn, seeds, depth=graph_depth)
+
+            return results
 
     async def recall(
         self,
@@ -130,10 +146,7 @@ class QueryMixin:
     ) -> list[Fact]:
         async with self.session() as conn:
             clause, params = time_travel_filter(tx_id, table_alias="f")
-            query = (
-                f"SELECT {_FACT_COLUMNS} {_FACT_JOIN} "
-                f"WHERE {clause}"
-            )
+            query = f"SELECT {_FACT_COLUMNS} {_FACT_JOIN} WHERE {clause}"
             if project:
                 query += " AND f.project = ?"
                 params.append(project)
@@ -147,9 +160,7 @@ class QueryMixin:
             cursor = await conn.execute("SELECT COUNT(*) FROM facts")
             total = (await cursor.fetchone())[0]
 
-            cursor = await conn.execute(
-                "SELECT COUNT(*) FROM facts WHERE valid_until IS NULL"
-            )
+            cursor = await conn.execute("SELECT COUNT(*) FROM facts WHERE valid_until IS NULL")
             active = (await cursor.fetchone())[0]
 
             cursor = await conn.execute(
@@ -158,20 +169,14 @@ class QueryMixin:
             projects = [p[0] for p in await cursor.fetchall()]
 
             cursor = await conn.execute(
-                "SELECT fact_type, COUNT(*) "
-                "FROM facts WHERE valid_until IS NULL "
-                "GROUP BY fact_type"
+                "SELECT fact_type, COUNT(*) FROM facts WHERE valid_until IS NULL GROUP BY fact_type"
             )
             types = dict(await cursor.fetchall())
 
             cursor = await conn.execute("SELECT COUNT(*) FROM transactions")
             tx_count = (await cursor.fetchone())[0]
 
-            db_size = (
-                self._db_path.stat().st_size / (1024 * 1024)
-                if self._db_path.exists()
-                else 0
-            )
+            db_size = self._db_path.stat().st_size / (1024 * 1024) if self._db_path.exists() else 0
 
             try:
                 cursor = await conn.execute("SELECT COUNT(*) FROM fact_embeddings")
@@ -195,6 +200,7 @@ class QueryMixin:
     async def graph(self, project: Optional[str] = None):
         """Get entity graph for a project."""
         from cortex.graph import get_graph
+
         async with self.session() as conn:
             return await get_graph(conn, project)
 
@@ -205,5 +211,30 @@ class QueryMixin:
     ) -> list[dict]:
         """Query a specific entity by name."""
         from cortex.graph import query_entity
+
         async with self.session() as conn:
             return await query_entity(conn, name, project)
+
+    async def find_path(
+        self,
+        source: str,
+        target: str,
+        max_depth: int = 3,
+    ) -> list[dict]:
+        """Find paths between two entities."""
+        from cortex.graph import find_path
+
+        async with self.session() as conn:
+            return await find_path(conn, source, target, max_depth)
+
+    async def get_context_subgraph(
+        self,
+        seeds: list[str],
+        depth: int = 2,
+        max_nodes: int = 50,
+    ) -> dict:
+        """Retrieve a subgraph context for RAG."""
+        from cortex.graph import get_context_subgraph
+
+        async with self.session() as conn:
+            return await get_context_subgraph(conn, seeds, depth, max_nodes)

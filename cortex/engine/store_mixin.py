@@ -1,4 +1,5 @@
 """Storage mixin — store, update, deprecate, ghost management."""
+
 from __future__ import annotations
 
 import json
@@ -30,14 +31,32 @@ class StoreMixin:
         """Store a new fact with proper connection management."""
         if conn:
             return await self._store_impl(
-                conn, project, content, fact_type, tags, confidence, 
-                source, meta, valid_from, commit, tx_id
+                conn,
+                project,
+                content,
+                fact_type,
+                tags,
+                confidence,
+                source,
+                meta,
+                valid_from,
+                commit,
+                tx_id,
             )
-        
+
         async with self.session() as conn:
             return await self._store_impl(
-                conn, project, content, fact_type, tags, confidence, 
-                source, meta, valid_from, commit, tx_id
+                conn,
+                project,
+                content,
+                fact_type,
+                tags,
+                confidence,
+                source,
+                meta,
+                valid_from,
+                commit,
+                tx_id,
             )
 
     async def _store_impl(
@@ -68,8 +87,17 @@ class StoreMixin:
             "valid_from, source, meta, created_at, updated_at, tx_id) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
-                project, content, fact_type, tags_json, confidence,
-                ts, source, meta_json, ts, ts, tx_id,
+                project,
+                content,
+                fact_type,
+                tags_json,
+                confidence,
+                ts,
+                source,
+                meta_json,
+                ts,
+                ts,
+                tx_id,
             ),
         )
         fact_id = cursor.lastrowid
@@ -85,17 +113,16 @@ class StoreMixin:
                 logger.warning("Embedding failed for fact %d: %s", fact_id, e)
 
         from cortex.graph import process_fact_graph
+
         try:
-             await process_fact_graph(conn, fact_id, content, project, ts)
+            await process_fact_graph(conn, fact_id, content, project, ts)
         except Exception as e:
             logger.warning("Graph extraction failed for fact %d: %s", fact_id, e)
 
         new_tx_id = await self._log_transaction(
             conn, project, "store", {"fact_id": fact_id, "fact_type": fact_type}
         )
-        await conn.execute(
-            "UPDATE facts SET tx_id = ? WHERE id = ?", (new_tx_id, fact_id)
-        )
+        await conn.execute("UPDATE facts SET tx_id = ? WHERE id = ?", (new_tx_id, fact_id))
 
         if commit:
             await conn.commit()
@@ -105,7 +132,7 @@ class StoreMixin:
     async def store_many(self, facts: List[Dict[str, Any]]) -> List[int]:
         if not facts:
             raise ValueError("facts list cannot be empty")
-        
+
         async with self.session() as conn:
             ids = []
             try:
@@ -164,30 +191,32 @@ class StoreMixin:
                 source=source,
                 meta=new_meta,
                 conn=conn,
-                commit=False
+                commit=False,
             )
             await self.deprecate(fact_id, reason=f"updated_by_{new_id}", conn=conn)
             await conn.commit()
             return new_id
 
     async def deprecate(
-        self, 
-        fact_id: int, 
+        self,
+        fact_id: int,
         reason: Optional[str] = None,
-        conn: Optional[aiosqlite.Connection] = None
+        conn: Optional[aiosqlite.Connection] = None,
     ) -> bool:
         if not isinstance(fact_id, int) or fact_id <= 0:
             raise ValueError("Invalid fact_id")
-        
+
         if conn:
             return await self._deprecate_impl(conn, fact_id, reason)
-        
+
         async with self.session() as conn:
             res = await self._deprecate_impl(conn, fact_id, reason)
             await conn.commit()
             return res
 
-    async def _deprecate_impl(self, conn: aiosqlite.Connection, fact_id: int, reason: Optional[str]) -> bool:
+    async def _deprecate_impl(
+        self, conn: aiosqlite.Connection, fact_id: int, reason: Optional[str]
+    ) -> bool:
         ts = now_iso()
         cursor = await conn.execute(
             "UPDATE facts SET valid_until = ?, updated_at = ?, "
@@ -197,9 +226,7 @@ class StoreMixin:
         )
 
         if cursor.rowcount > 0:
-            cursor = await conn.execute(
-                "SELECT project FROM facts WHERE id = ?", (fact_id,)
-            )
+            cursor = await conn.execute("SELECT project FROM facts WHERE id = ?", (fact_id,))
             row = await cursor.fetchone()
             await self._log_transaction(
                 conn,
@@ -210,24 +237,29 @@ class StoreMixin:
             # CDC: Enqueue for Neo4j sync
             await conn.execute(
                 "INSERT INTO graph_outbox (fact_id, action, status) VALUES (?, ?, ?)",
-                (fact_id, "deprecate_fact", "pending")
+                (fact_id, "deprecate_fact", "pending"),
             )
             return True
         return False
 
     async def register_ghost(
-        self, reference: str, context: str, project: str,
-        conn: Optional[aiosqlite.Connection] = None
+        self,
+        reference: str,
+        context: str,
+        project: str,
+        conn: Optional[aiosqlite.Connection] = None,
     ) -> int:
         if conn:
             return await self._register_ghost_impl(conn, reference, context, project)
-        
+
         async with self.session() as conn:
             res = await self._register_ghost_impl(conn, reference, context, project)
             await conn.commit()
             return res
 
-    async def _register_ghost_impl(self, conn: aiosqlite.Connection, reference: str, context: str, project: str) -> int:
+    async def _register_ghost_impl(
+        self, conn: aiosqlite.Connection, reference: str, context: str, project: str
+    ) -> int:
         # Check if exists (idempotency)
         cursor = await conn.execute(
             "SELECT id FROM ghosts WHERE reference = ? AND project = ?",
@@ -247,18 +279,23 @@ class StoreMixin:
         return cursor.lastrowid
 
     async def resolve_ghost(
-        self, ghost_id: int, target_entity_id: int, confidence: float = 1.0,
-        conn: Optional[aiosqlite.Connection] = None
+        self,
+        ghost_id: int,
+        target_entity_id: int,
+        confidence: float = 1.0,
+        conn: Optional[aiosqlite.Connection] = None,
     ) -> bool:
         if conn:
             return await self._resolve_ghost_impl(conn, ghost_id, target_entity_id, confidence)
-            
+
         async with self.session() as conn:
             res = await self._resolve_ghost_impl(conn, ghost_id, target_entity_id, confidence)
             await conn.commit()
             return res
 
-    async def _resolve_ghost_impl(self, conn: aiosqlite.Connection, ghost_id: int, target_entity_id: int, confidence: float) -> bool:
+    async def _resolve_ghost_impl(
+        self, conn: aiosqlite.Connection, ghost_id: int, target_entity_id: int, confidence: float
+    ) -> bool:
         ts = now_iso()
         cursor = await conn.execute(
             "UPDATE ghosts SET status = 'resolved', target_id = ?, "

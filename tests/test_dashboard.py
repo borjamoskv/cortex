@@ -1,7 +1,6 @@
 """Tests for dashboard and time-tracking endpoints."""
 
 import os
-import tempfile
 
 import pytest
 from datetime import datetime, timedelta, timezone
@@ -23,6 +22,7 @@ def client(dashboard_env):
     # Import here so CORTEX_DB env is set before the module-level DB_PATH reads it
     # We need to patch the DB_PATH directly since it's read at import time
     import cortex.api as api_mod
+
     original_db = api_mod.DB_PATH
     api_mod.DB_PATH = dashboard_env
     try:
@@ -41,16 +41,12 @@ def test_daily_method(client):
 
     # Day 0 (Today)
     tracker.heartbeat("proj1", "file1.py", timestamp=now.isoformat())
-    tracker.heartbeat(
-        "proj1", "file1.py", timestamp=(now + timedelta(minutes=60)).isoformat()
-    )
+    tracker.heartbeat("proj1", "file1.py", timestamp=(now + timedelta(minutes=60)).isoformat())
 
     # Day -1 (Yesterday)
     d1 = now - timedelta(days=1)
     tracker.heartbeat("proj1", "file1.py", timestamp=d1.isoformat())
-    tracker.heartbeat(
-        "proj1", "file1.py", timestamp=(d1 + timedelta(minutes=120)).isoformat()
-    )
+    tracker.heartbeat("proj1", "file1.py", timestamp=(d1 + timedelta(minutes=120)).isoformat())
 
     tracker.flush(gap_seconds=3600 * 5)
 

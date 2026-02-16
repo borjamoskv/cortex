@@ -4,7 +4,7 @@ CORTEX v4.0 — MEJORAlo Router.
 API endpoints for the MEJORAlo v7.3 protocol.
 """
 
-from typing import List, Optional
+from typing import List
 
 from fastapi import APIRouter, Depends, Query
 
@@ -40,9 +40,7 @@ async def scan_project(
         score=result.score,
         stack=result.stack,
         dimensions=[
-            DimensionResultModel(
-                name=d.name, score=d.score, weight=d.weight, findings=d.findings
-            )
+            DimensionResultModel(name=d.name, score=d.score, weight=d.weight, findings=d.findings)
             for d in result.dimensions
         ],
         dead_code=result.dead_code,
@@ -96,10 +94,7 @@ async def ship_gate(
     return MejoraloShipResponse(
         project=result.project,
         ready=result.ready,
-        seals=[
-            ShipSealModel(name=s.name, passed=s.passed, detail=s.detail)
-            for s in result.seals
-        ],
+        seals=[ShipSealModel(name=s.name, passed=s.passed, detail=s.detail) for s in result.seals],
         passed=result.passed,
         total=result.total,
     )

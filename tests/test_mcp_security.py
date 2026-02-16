@@ -2,6 +2,7 @@
 
 Tests input validation, poisoning detection, and content limits.
 """
+
 import pytest
 from cortex.mcp.guard import MCPGuard
 
@@ -40,8 +41,15 @@ class TestValidateStore:
     def test_valid_fact_types_accepted(self):
         """All whitelisted fact types should pass."""
         allowed = {
-            "knowledge", "decision", "error", "rule", "axiom",
-            "schema", "idea", "ghost", "bridge",
+            "knowledge",
+            "decision",
+            "error",
+            "rule",
+            "axiom",
+            "schema",
+            "idea",
+            "ghost",
+            "bridge",
         }
         for ft in allowed:
             MCPGuard.validate_store("proj", "content", ft)
@@ -104,5 +112,7 @@ class TestPoisoningDetection:
     def test_clean_content_passes(self):
         """Normal educational/technical content should not be flagged."""
         assert not MCPGuard.detect_poisoning("CORTEX uses Merkle trees for integrity verification")
-        assert not MCPGuard.detect_poisoning("The function takes 3 arguments: project, content, and tags")
+        assert not MCPGuard.detect_poisoning(
+            "The function takes 3 arguments: project, content, and tags"
+        )
         assert not MCPGuard.detect_poisoning("SQLite is a self-contained SQL database engine")

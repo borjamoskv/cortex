@@ -1,4 +1,5 @@
 """CORTEX MEJORAlo Package."""
+
 from .engine import MejoraloEngine
 from .types import DimensionResult, ScanResult, ShipResult, ShipSeal
 

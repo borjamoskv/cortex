@@ -64,7 +64,7 @@ class CortexConnectionPool:
             # Check again under lock
             if self._initialized:
                 return
-                
+
             for _ in range(self.min_connections):
                 conn = await self._create_connection()
                 await self._pool.put(conn)
@@ -78,10 +78,11 @@ class CortexConnectionPool:
         except Exception as e:
             logger.critical("Failed to create DB connection: %s", e)
             raise
-        
+
         # Wave 5: Load Vector Extension
         try:
             import sqlite_vec
+
             await conn.enable_load_extension(True)
             await conn.load_extension(sqlite_vec.loadable_path())
             await conn.enable_load_extension(False)
@@ -92,7 +93,7 @@ class CortexConnectionPool:
         await conn.execute("PRAGMA journal_mode=WAL;")
         await conn.execute("PRAGMA synchronous=NORMAL;")
         await conn.execute("PRAGMA foreign_keys=ON;")
-        await conn.execute("PRAGMA busy_timeout=5000;") 
+        await conn.execute("PRAGMA busy_timeout=5000;")
         await conn.commit()
         return conn
 
@@ -105,7 +106,7 @@ class CortexConnectionPool:
         # Enforce max concurrency
         await self._semaphore.acquire()
         conn: Optional[aiosqlite.Connection] = None
-        
+
         try:
             # Try to get from pool without waiting
             try:
@@ -142,7 +143,7 @@ class CortexConnectionPool:
         finally:
             # Always release semaphore
             self._semaphore.release()
-            
+
             if conn:
                 # Return to pool
                 await self._pool.put(conn)

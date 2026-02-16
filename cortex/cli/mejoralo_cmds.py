@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import click
-from rich.panel import Panel
 from rich.table import Table
 
 from cortex.cli import DEFAULT_DB, cli, console, get_engine
@@ -23,6 +22,7 @@ def mejoralo():
 def mejoralo_scan(project, path, deep, db):
     """X-Ray 13D — Escaneo multidimensional del proyecto."""
     from cortex.mejoralo import MejoraloEngine
+
     engine = get_engine(db)
     try:
         m = MejoraloEngine(engine)
@@ -65,12 +65,15 @@ def mejoralo_scan(project, path, deep, db):
 def mejoralo_record(project, score_before, score_after, actions, db):
     """Ouroboros — Registrar sesión MEJORAlo en el ledger."""
     from cortex.mejoralo import MejoraloEngine
+
     engine = get_engine(db)
     try:
         m = MejoraloEngine(engine)
         fact_id = m.record_session(
-            project=project, score_before=score_before,
-            score_after=score_after, actions=list(actions),
+            project=project,
+            score_before=score_before,
+            score_after=score_after,
+            actions=list(actions),
         )
         delta = score_after - score_before
         color = "green" if delta > 0 else "red" if delta < 0 else "yellow"
@@ -89,6 +92,7 @@ def mejoralo_record(project, score_before, score_after, actions, db):
 def mejoralo_history(project, limit, db):
     """Historial de sesiones MEJORAlo."""
     from cortex.mejoralo import MejoraloEngine
+
     engine = get_engine(db)
     try:
         m = MejoraloEngine(engine)
@@ -126,6 +130,7 @@ def mejoralo_history(project, limit, db):
 def mejoralo_ship(project, path, db):
     """Ship Gate — Los 7 Sellos de producción."""
     from cortex.mejoralo import MejoraloEngine
+
     engine = get_engine(db)
     try:
         m = MejoraloEngine(engine)
@@ -136,8 +141,12 @@ def mejoralo_ship(project, path, db):
             console.print(f"  {icon} {seal.name}: {seal.detail}")
         console.print()
         if result.ready:
-            console.print(f"  [bold green]🚀 READY — {result.passed}/{result.total} sellos aprobados[/]")
+            console.print(
+                f"  [bold green]🚀 READY — {result.passed}/{result.total} sellos aprobados[/]"
+            )
         else:
-            console.print(f"  [bold red]⛔ NOT READY — {result.passed}/{result.total} sellos aprobados[/]")
+            console.print(
+                f"  [bold red]⛔ NOT READY — {result.passed}/{result.total} sellos aprobados[/]"
+            )
     finally:
         engine.close_sync()

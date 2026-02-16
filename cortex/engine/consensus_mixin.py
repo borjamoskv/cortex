@@ -1,4 +1,5 @@
 """Consensus mixin — vote, register_agent, vote_v2."""
+
 from __future__ import annotations
 
 import logging
@@ -42,14 +43,15 @@ class ConsensusMixin:
             action = "unvote"
         else:
             await conn.execute(
-                "INSERT OR REPLACE INTO consensus_votes "
-                "(fact_id, agent, vote) VALUES (?, ?, ?)",
+                "INSERT OR REPLACE INTO consensus_votes (fact_id, agent, vote) VALUES (?, ?, ?)",
                 (fact_id, agent, value),
             )
             action = "vote"
 
         await self._log_transaction(
-            conn, "consensus", action,
+            conn,
+            "consensus",
+            action,
             {"fact_id": fact_id, "agent": agent, "vote": value},
         )
         score = await self._recalculate_consensus(fact_id, conn)
@@ -95,8 +97,7 @@ class ConsensusMixin:
 
         conn = await self.get_conn()
         cursor = await conn.execute(
-            "SELECT reputation_score FROM agents "
-            "WHERE id = ? AND is_active = 1",
+            "SELECT reputation_score FROM agents WHERE id = ? AND is_active = 1",
             (agent_id,),
         )
         agent = await cursor.fetchone()
@@ -112,8 +113,7 @@ class ConsensusMixin:
 
         if value == 0:
             await conn.execute(
-                "DELETE FROM consensus_votes_v2 "
-                "WHERE fact_id = ? AND agent_id = ?",
+                "DELETE FROM consensus_votes_v2 WHERE fact_id = ? AND agent_id = ?",
                 (fact_id, agent_id),
             )
             action = "unvote_v2"
@@ -128,7 +128,9 @@ class ConsensusMixin:
             action = "vote_v2"
 
         await self._log_transaction(
-            conn, "consensus", action,
+            conn,
+            "consensus",
+            action,
             {
                 "fact_id": fact_id,
                 "agent_id": agent_id,
@@ -141,9 +143,7 @@ class ConsensusMixin:
         await conn.commit()
         return score
 
-    async def _recalculate_consensus_v2(
-        self, fact_id: int, conn
-    ) -> float:
+    async def _recalculate_consensus_v2(self, fact_id: int, conn) -> float:
         """Recalculate consensus using reputation-weighted votes."""
         cursor = await conn.execute(
             "SELECT v.vote, v.vote_weight, a.reputation_score "
@@ -158,17 +158,11 @@ class ConsensusMixin:
 
         weighted_sum = sum(v[0] * max(v[1], v[2]) for v in votes)
         total_weight = sum(max(v[1], v[2]) for v in votes)
-        score = (
-            1.0 + (weighted_sum / total_weight)
-            if total_weight > 0
-            else 1.0
-        )
+        score = 1.0 + (weighted_sum / total_weight) if total_weight > 0 else 1.0
         await self._update_fact_score(fact_id, score, conn)
         return score
 
-    async def _recalculate_consensus(
-        self, fact_id: int, conn
-    ) -> float:
+    async def _recalculate_consensus(self, fact_id: int, conn) -> float:
         """Recalculate consensus from simple v1 votes."""
         cursor = await conn.execute(
             "SELECT SUM(vote) FROM consensus_votes WHERE fact_id = ?",
@@ -180,9 +174,7 @@ class ConsensusMixin:
         await self._update_fact_score(fact_id, score, conn)
         return score
 
-    async def _update_fact_score(
-        self, fact_id: int, score: float, conn
-    ) -> None:
+    async def _update_fact_score(self, fact_id: int, score: float, conn) -> None:
         """Update fact consensus score and auto-set confidence."""
         if score >= 1.5:
             conf = "verified"
@@ -193,8 +185,7 @@ class ConsensusMixin:
 
         if conf:
             await conn.execute(
-                "UPDATE facts SET consensus_score = ?, confidence = ? "
-                "WHERE id = ?",
+                "UPDATE facts SET consensus_score = ?, confidence = ? WHERE id = ?",
                 (score, conf, fact_id),
             )
         else:

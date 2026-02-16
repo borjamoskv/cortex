@@ -21,6 +21,7 @@ import httpx
 @dataclass
 class Fact:
     """A single fact from CORTEX."""
+
     id: int
     project: str
     content: str
@@ -34,6 +35,7 @@ class Fact:
 
 class CortexError(Exception):
     """Base error for CORTEX client."""
+
     def __init__(self, status_code: int, detail: str):
         self.status_code = status_code
         self.detail = detail
@@ -72,7 +74,11 @@ class CortexClient:
     def _request(self, method: str, path: str, **kwargs) -> dict:
         resp = self._client.request(method, path, **kwargs)
         if resp.status_code >= 400:
-            detail = resp.json().get("detail", resp.text) if resp.headers.get("content-type", "").startswith("application/json") else resp.text
+            detail = (
+                resp.json().get("detail", resp.text)
+                if resp.headers.get("content-type", "").startswith("application/json")
+                else resp.text
+            )
             raise CortexError(resp.status_code, detail)
         return resp.json()
 

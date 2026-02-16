@@ -1,10 +1,11 @@
 """Sync Engine: Read (Memory -> DB)."""
+
 from __future__ import annotations
 
 import json
 import logging
 import sqlite3
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from cortex.sync.common import (
     MEMORY_DIR,
@@ -150,21 +151,19 @@ def _sync_ghosts(engine: CortexEngine, path: Path, result: SyncResult) -> None:
             result.errors.append(f"Error sincronizando ghost {project_name}: {e}")
 
 
-
-
-
-
-
-
 def _sync_mistakes(engine: CortexEngine, path: Path, result: SyncResult) -> None:
     """Sincroniza mistakes.jsonl — memoria de errores."""
     existing = get_existing_contents(engine, None, fact_type="error")
-    lines = [json.loads(l) for l in path.read_text(encoding="utf-8").strip().splitlines() if l.strip()]
-    
+    lines = [
+        json.loads(l) for l in path.read_text(encoding="utf-8").strip().splitlines() if l.strip()
+    ]
+
     def generate_content(m):
-        return (f"ERROR: {m.get('error', 'desconocido')} | "
-                f"CAUSA: {m.get('root_cause', 'desconocida')} | "
-                f"FIX: {m.get('fix', 'desconocido')}")
+        return (
+            f"ERROR: {m.get('error', 'desconocido')} | "
+            f"CAUSA: {m.get('root_cause', 'desconocida')} | "
+            f"FIX: {m.get('fix', 'desconocido')}"
+        )
 
     new_mistakes = calculate_fact_diff(existing, lines, generate_content)
     for content, m in new_mistakes:
@@ -188,12 +187,16 @@ def _sync_mistakes(engine: CortexEngine, path: Path, result: SyncResult) -> None
 def _sync_bridges(engine: CortexEngine, path: Path, result: SyncResult) -> None:
     """Sincroniza bridges.jsonl — conexiones entre proyectos."""
     existing = get_existing_contents(engine, "__bridges__", fact_type="bridge")
-    lines = [json.loads(l) for l in path.read_text(encoding="utf-8").strip().splitlines() if l.strip()]
+    lines = [
+        json.loads(l) for l in path.read_text(encoding="utf-8").strip().splitlines() if l.strip()
+    ]
 
     def generate_content(b):
-        return (f"BRIDGE: {b.get('from', '?')} → {b.get('to', '?')} | "
-                f"Patrón: {b.get('pattern', '?')} | "
-                f"Nota: {b.get('note', '')}")
+        return (
+            f"BRIDGE: {b.get('from', '?')} → {b.get('to', '?')} | "
+            f"Patrón: {b.get('pattern', '?')} | "
+            f"Nota: {b.get('note', '')}"
+        )
 
     new_bridges = calculate_fact_diff(existing, lines, generate_content)
     for content, b in new_bridges:

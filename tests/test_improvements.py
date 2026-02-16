@@ -10,14 +10,12 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
-import tempfile
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 import pytest_asyncio
 
-from cortex.engine import CortexEngine, Fact
+from cortex.engine import CortexEngine
 from cortex.export import export_facts
 from cortex.metrics import MetricsRegistry
 from cortex.migrations import (
@@ -42,10 +40,18 @@ async def engine(tmp_path):
 async def populated_engine(engine):
     """Engine with some test facts."""
     await engine.store("proj-a", "Python is great", fact_type="knowledge", tags=["python", "lang"])
-    await engine.store("proj-a", "TypeScript is typed", fact_type="knowledge", tags=["typescript", "lang"])
-    await engine.store("proj-a", "Use pytest for testing", fact_type="decision", tags=["python", "testing"])
-    await engine.store("proj-b", "Deploy on Fridays is risky", fact_type="mistake", tags=["deploy", "ops"])
-    await engine.store("proj-b", "WAL mode is faster", fact_type="knowledge", tags=["sqlite", "perf"])
+    await engine.store(
+        "proj-a", "TypeScript is typed", fact_type="knowledge", tags=["typescript", "lang"]
+    )
+    await engine.store(
+        "proj-a", "Use pytest for testing", fact_type="decision", tags=["python", "testing"]
+    )
+    await engine.store(
+        "proj-b", "Deploy on Fridays is risky", fact_type="mistake", tags=["deploy", "ops"]
+    )
+    await engine.store(
+        "proj-b", "WAL mode is faster", fact_type="knowledge", tags=["sqlite", "perf"]
+    )
     return engine
 
 
@@ -102,10 +108,7 @@ class TestStoreMany:
     @pytest.mark.asyncio
     async def test_batch_store_is_atomic(self, engine):
         """All facts should be visible after batch store."""
-        facts = [
-            {"project": "batch", "content": f"Fact {i}"}
-            for i in range(10)
-        ]
+        facts = [{"project": "batch", "content": f"Fact {i}"} for i in range(10)]
         ids = await engine.store_many(facts)
         assert len(ids) == 10
         recalled = await engine.recall("batch")
@@ -121,7 +124,7 @@ class TestStoreMany:
         facts = [
             {"project": "rollback_test", "content": "Fact 0"},
             {"project": "rollback_test", "content": "Fact 1"},
-            {"project": "",              "content": "Bad fact"},  # triggers ValueError
+            {"project": "", "content": "Bad fact"},  # triggers ValueError
             {"project": "rollback_test", "content": "Fact 3"},
         ]
 
@@ -130,9 +133,7 @@ class TestStoreMany:
 
         # Critical assertion: zero facts should persist after rollback
         recalled = await engine.recall("rollback_test")
-        assert len(recalled) == 0, (
-            f"Expected 0 facts after rollback, got {len(recalled)}"
-        )
+        assert len(recalled) == 0, f"Expected 0 facts after rollback, got {len(recalled)}"
 
     def test_database_transaction_error_exists(self):
         """Verify DatabaseTransactionError is importable and properly typed."""
@@ -198,7 +199,11 @@ class TestUpdate:
     @pytest.mark.asyncio
     async def test_update_keeps_unchanged_fields(self, engine):
         original_id = await engine.store(
-            "p1", "Content", fact_type="decision", tags=["tag1"], source="test",
+            "p1",
+            "Content",
+            fact_type="decision",
+            tags=["tag1"],
+            source="test",
         )
         new_id = await engine.update(original_id, tags=["tag2"])
 
@@ -217,9 +222,7 @@ class TestSearchFilters:
         results = await populated_engine.search("programming", tags=["python"])
         for r in results:
             conn = populated_engine._get_conn()
-            cursor = await conn.execute(
-                "SELECT tags FROM facts WHERE id = ?", (r.fact_id,)
-            )
+            cursor = await conn.execute("SELECT tags FROM facts WHERE id = ?", (r.fact_id,))
             fact = await cursor.fetchone()
             if fact:
                 tags = json.loads(fact[0])
@@ -233,9 +236,7 @@ class TestSearchFilters:
 
     @pytest.mark.asyncio
     async def test_search_combined_filters(self, populated_engine):
-        results = await populated_engine.search(
-            "language", tags=["lang"], fact_type="knowledge"
-        )
+        results = await populated_engine.search("language", tags=["lang"], fact_type="knowledge")
         for r in results:
             assert r.fact_type == "knowledge"
 
@@ -455,21 +456,25 @@ class TestCortexClient:
     """Test client methods without live server (mocked requests)."""
 
     def test_client_import(self):
-        from cortex.client import CortexClient, CortexError, Fact
+        from cortex.client import CortexClient, CortexError
+
         assert CortexClient is not None
         assert CortexError is not None
 
     def test_async_client_import(self):
         from cortex.async_client import AsyncCortexClient
+
         assert AsyncCortexClient is not None
 
     def test_client_context_manager(self):
         from cortex.client import CortexClient
+
         with CortexClient("http://fake:9999") as client:
             assert client is not None
 
     def test_client_headers(self):
         from cortex.client import CortexClient
+
         client = CortexClient("http://fake:9999", api_key="test-key")
         headers = client._headers()
         assert headers["Authorization"] == "Bearer test-key"
@@ -477,6 +482,7 @@ class TestCortexClient:
 
     def test_client_no_key(self):
         from cortex.client import CortexClient
+
         with patch.dict(os.environ, {}, clear=True):
             client = CortexClient("http://fake:9999", api_key=None)
             headers = client._headers()
@@ -485,6 +491,7 @@ class TestCortexClient:
 
     def test_cortex_error(self):
         from cortex.client import CortexError
+
         err = CortexError(404, "Not found")
         assert err.status_code == 404
         assert err.detail == "Not found"

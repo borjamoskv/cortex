@@ -1,14 +1,13 @@
 """Sync Engine: Write (DB -> Memory/Artifacts)."""
+
 from __future__ import annotations
 
 import hashlib
 import json
 import logging
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from cortex.sync.common import (
-    CORTEX_DIR,
     MEMORY_DIR,
     WritebackResult,
     atomic_write,
@@ -22,8 +21,6 @@ if TYPE_CHECKING:
     from cortex.engine import CortexEngine
 
 logger = logging.getLogger("cortex.sync")
-
-
 
 
 def export_to_json(engine: CortexEngine) -> WritebackResult:
@@ -106,7 +103,8 @@ def export_to_json(engine: CortexEngine) -> WritebackResult:
     if result.had_changes:
         logger.info(
             "Write-back completado: %d archivos actualizados, %d items exportados",
-            result.files_written, result.items_exported,
+            result.files_written,
+            result.items_exported,
         )
     else:
         logger.debug("Write-back: sin cambios en DB desde la última exportación")
@@ -161,13 +159,15 @@ def _writeback_system(engine: CortexEngine, result: WritebackResult) -> None:
     knowledge_list = []
     for row in k_rows:
         meta = json.loads(row[4]) if row[4] else {}
-        knowledge_list.append({
-            "id": meta.get("id", f"K{len(knowledge_list) + 1:03d}"),
-            "topic": meta.get("topic", "general"),
-            "content": row[0],
-            "added": row[3] or "",
-            "confidence": row[2] or "stated",
-        })
+        knowledge_list.append(
+            {
+                "id": meta.get("id", f"K{len(knowledge_list) + 1:03d}"),
+                "topic": meta.get("topic", "general"),
+                "content": row[0],
+                "added": row[3] or "",
+                "confidence": row[2] or "stated",
+            }
+        )
 
     # Decisions global — reconstruir desde DB
     d_rows = conn.execute(
@@ -179,11 +179,13 @@ def _writeback_system(engine: CortexEngine, result: WritebackResult) -> None:
     decisions_list = []
     for row in d_rows:
         meta = json.loads(row[1]) if row[1] else {}
-        decisions_list.append({
-            "id": meta.get("id", f"D{len(decisions_list) + 1:03d}"),
-            "decision": row[0],
-            **{k: v for k, v in meta.items() if k != "id"},
-        })
+        decisions_list.append(
+            {
+                "id": meta.get("id", f"D{len(decisions_list) + 1:03d}"),
+                "decision": row[0],
+                **{k: v for k, v in meta.items() if k != "id"},
+            }
+        )
 
     system_data["knowledge_global"] = knowledge_list
     system_data["decisions_global"] = decisions_list
@@ -195,7 +197,9 @@ def _writeback_system(engine: CortexEngine, result: WritebackResult) -> None:
     count = len(knowledge_list) + len(decisions_list)
     result.files_written += 1
     result.items_exported += count
-    logger.info("Write-back system: %d knowledge + %d decisions", len(knowledge_list), len(decisions_list))
+    logger.info(
+        "Write-back system: %d knowledge + %d decisions", len(knowledge_list), len(decisions_list)
+    )
 
 
 def _writeback_mistakes(engine: CortexEngine, result: WritebackResult) -> None:

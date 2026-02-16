@@ -100,7 +100,11 @@ def backfill(
             rate = embedded / elapsed if elapsed > 0 else 0
             logger.info(
                 "  [%d/%d] embedded=%d skipped=%d (%.1f facts/s)",
-                min(i + batch_size, total), total, embedded, skipped, rate,
+                min(i + batch_size, total),
+                total,
+                embedded,
+                skipped,
+                rate,
             )
         except Exception as e:
             logger.error("  Batch %d failed: %s", i // batch_size, e)
@@ -109,7 +113,9 @@ def backfill(
     elapsed = time.time() - start
     conn.close()
 
-    logger.info("🎯 Backfill complete: %d embedded, %d skipped in %.1fs", embedded, skipped, elapsed)
+    logger.info(
+        "🎯 Backfill complete: %d embedded, %d skipped in %.1fs", embedded, skipped, elapsed
+    )
     return {"total": total, "embedded": embedded, "skipped": skipped, "time": elapsed}
 
 

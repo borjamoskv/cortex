@@ -1,15 +1,15 @@
 """Fact Sovereign Layer — FactManager for CORTEX."""
+
 from __future__ import annotations
 
 import json
 import logging
 from typing import Any, Dict, List, Optional
 
-import aiosqlite
 
 from cortex.engine.models import Fact, row_to_fact
 from cortex.search import SearchResult, semantic_search, text_search
-from cortex.temporal import build_temporal_filter_params, now_iso, time_travel_filter
+from cortex.temporal import build_temporal_filter_params, now_iso
 
 logger = logging.getLogger("cortex.facts")
 
@@ -54,7 +54,19 @@ class FactManager:
             "INSERT INTO facts (project, content, fact_type, tags, confidence, "
             "valid_from, source, meta, created_at, updated_at, tx_id) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (project, content, fact_type, tags_json, confidence, ts, source, meta_json, ts, ts, tx_id),
+            (
+                project,
+                content,
+                fact_type,
+                tags_json,
+                confidence,
+                ts,
+                source,
+                meta_json,
+                ts,
+                ts,
+                tx_id,
+            ),
         )
         fact_id = cursor.lastrowid
 
@@ -70,6 +82,7 @@ class FactManager:
                 logger.warning("Embedding failed for fact %d: %s", fact_id, e)
 
         from cortex.graph import process_fact_graph
+
         try:
             await process_fact_graph(conn, fact_id, content, project, ts)
         except Exception as e:
@@ -106,7 +119,9 @@ class FactManager:
             logger.warning("Semantic search failed: %s", e)
         return await text_search(conn, query, project, limit=top_k, **kwargs)
 
-    async def recall(self, project: str, limit: Optional[int] = None, offset: int = 0) -> list[Fact]:
+    async def recall(
+        self, project: str, limit: Optional[int] = None, offset: int = 0
+    ) -> list[Fact]:
         conn = await self.engine.get_conn()
         query = f"SELECT {_FACT_COLUMNS} {_FACT_JOIN} WHERE f.project = ? AND f.valid_until IS NULL ORDER BY (f.consensus_score * 0.8 + (1.0 / (1.0 + (julianday('now') - julianday(f.created_at)))) * 0.2) DESC, f.fact_type, f.created_at DESC"
         params: list = [project]
@@ -169,12 +184,15 @@ class FactManager:
             cursor = await conn.execute("SELECT project FROM facts WHERE id = ?", (fact_id,))
             row = await cursor.fetchone()
             await self.engine._log_transaction(
-                conn, row[0] if row else "unknown", "deprecate", {"fact_id": fact_id, "reason": reason}
+                conn,
+                row[0] if row else "unknown",
+                "deprecate",
+                {"fact_id": fact_id, "reason": reason},
             )
             # CDC: Encole for Neo4j sync
             await conn.execute(
                 "INSERT INTO graph_outbox (fact_id, action, status) VALUES (?, ?, ?)",
-                (fact_id, "deprecate_fact", "pending")
+                (fact_id, "deprecate_fact", "pending"),
             )
             await conn.commit()
             return True
@@ -229,7 +247,11 @@ class FactManager:
         cursor = await conn.execute("SELECT COUNT(*) FROM transactions")
         tx_count = (await cursor.fetchone())[0]
 
-        db_size = self.engine._db_path.stat().st_size / (1024 * 1024) if self.engine._db_path.exists() else 0
+        db_size = (
+            self.engine._db_path.stat().st_size / (1024 * 1024)
+            if self.engine._db_path.exists()
+            else 0
+        )
 
         try:
             cursor = await conn.execute("SELECT COUNT(*) FROM fact_embeddings")

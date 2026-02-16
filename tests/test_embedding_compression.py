@@ -2,11 +2,13 @@
 
 Tests quantize/dequantize roundtrip, compression ratio, and edge cases.
 """
+
 import pytest
 from cortex.compression import quantize_int8, dequantize_int8, compression_ratio
 
 try:
     import numpy as np
+
     _NP_AVAILABLE = True
 except ImportError:
     _NP_AVAILABLE = False

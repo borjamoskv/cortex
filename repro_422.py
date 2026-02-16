@@ -2,8 +2,9 @@ import requests
 import json
 
 BASE_URL = "http://localhost:8000"
-KEY = "ctx_1a8011210fe7d35813661745d9a55b27826a095bb7192fa9e7cace484c7ed22f" # From test log
+KEY = "ctx_1a8011210fe7d35813661745d9a55b27826a095bb7192fa9e7cace484c7ed22f"  # From test log
 HEADERS = {"Authorization": f"Bearer {KEY}"}
+
 
 def check_recall():
     print("--- Recall Project 'test' ---")
@@ -19,6 +20,7 @@ def check_recall():
             print(json.dumps(resp.json(), indent=2))
         except:
             print(resp.text)
+
 
 if __name__ == "__main__":
     check_recall()

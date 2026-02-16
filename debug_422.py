@@ -16,13 +16,15 @@ with TestClient(app) as client:
     auth_headers = {"Authorization": f"Bearer {api_key}"}
 
     # Store a fact
-    client.post("/v1/facts",
+    client.post(
+        "/v1/facts",
         json={
             "project": "test",
             "content": "Test fact for debugging",
             "tags": ["debug"],
         },
-        headers=auth_headers)
+        headers=auth_headers,
+    )
 
     # Recall and print 422 detail if it fails
     resp = client.get("/v1/projects/test/facts", headers=auth_headers)

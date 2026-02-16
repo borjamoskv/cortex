@@ -1,11 +1,13 @@
 """CORTEX Engine — Package init."""
+
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any, AsyncIterator
+from contextlib import asynccontextmanager
 
 import aiosqlite
 import sqlite_vec
@@ -29,6 +31,7 @@ from cortex.facts.manager import FactManager
 from cortex.embeddings.manager import EmbeddingManager
 from cortex.consensus.manager import ConsensusManager
 
+
 class CortexEngine(SyncCompatMixin):
     """The Sovereign Ledger for AI Agents (Composite Orchestrator)."""
 
@@ -44,11 +47,17 @@ class CortexEngine(SyncCompatMixin):
         self._vec_available = False
         self._conn_lock = asyncio.Lock()
         self._ledger = None  # Wave 5: ImmutableLedger (lazy init)
-        
+
         # Composition layers
         self.facts = FactManager(self)
         self.embeddings = EmbeddingManager(self)
         self.consensus = ConsensusManager(self)
+
+    @asynccontextmanager
+    async def session(self) -> AsyncIterator[aiosqlite.Connection]:
+        """Proporciona una sesión transaccional (conexión) válida."""
+        conn = await self.get_conn()
+        yield conn
 
     # ─── Connection ───────────────────────────────────────────────
 
@@ -58,9 +67,7 @@ class CortexEngine(SyncCompatMixin):
             if self._conn is not None:
                 return self._conn
 
-            self._conn = await aiosqlite.connect(
-                str(self._db_path), timeout=30
-            )
+            self._conn = await aiosqlite.connect(str(self._db_path), timeout=30)
 
             try:
                 await self._conn.enable_load_extension(True)
@@ -78,7 +85,7 @@ class CortexEngine(SyncCompatMixin):
 
     def _get_conn(self) -> aiosqlite.Connection:
         if self._conn is None:
-             raise RuntimeError("Connection not initialized. Call get_conn() first.")
+            raise RuntimeError("Connection not initialized. Call get_conn() first.")
         return self._conn
 
     # ─── Backward Compatibility Aliases & Delegation ──────────────
@@ -123,6 +130,7 @@ class CortexEngine(SyncCompatMixin):
         await conn.commit()
 
         from cortex.migrations.core import run_migrations_async
+
         await run_migrations_async(conn)
 
         for k, v in get_init_meta():
@@ -143,13 +151,11 @@ class CortexEngine(SyncCompatMixin):
 
         dj = canonical_json(detail)
         ts = now_iso()
-        cursor = await conn.execute(
-            "SELECT hash FROM transactions ORDER BY id DESC LIMIT 1"
-        )
+        cursor = await conn.execute("SELECT hash FROM transactions ORDER BY id DESC LIMIT 1")
         prev = await cursor.fetchone()
         ph = prev[0] if prev else "GENESIS"
         th = compute_tx_hash(ph, project, action, dj, ts)
-        
+
         c = await conn.execute(
             "INSERT INTO transactions "
             "(project, action, detail, prev_hash, hash, timestamp) "
@@ -174,21 +180,23 @@ class CortexEngine(SyncCompatMixin):
     async def verify_ledger(self) -> dict:
         if not self._ledger:
             from cortex.engine.ledger import ImmutableLedger
+
             self._ledger = ImmutableLedger(await self.get_conn())
         return await self._ledger.verify_integrity_async()
 
     async def process_graph_outbox_async(self, limit: int = 10) -> int:
         from cortex.graph.backends.neo4j import Neo4jBackend
+
         conn = await self.get_conn()
         async with conn.execute(
             "SELECT id, fact_id, action FROM graph_outbox WHERE status = 'pending' LIMIT ?",
             (limit,),
         ) as cursor:
             events = await cursor.fetchall()
-        
+
         if not events:
             return 0
-            
+
         processed_count = 0
         try:
             neo4j = Neo4jBackend()
@@ -202,7 +210,7 @@ class CortexEngine(SyncCompatMixin):
                 success = False
                 if action == "deprecate_fact":
                     success = await neo4j.delete_fact_elements(fact_id)
-                
+
                 status = "processed" if success else "failed"
                 await conn.execute(
                     "UPDATE graph_outbox SET status = ?, processed_at = ?, retry_count = retry_count + 1 WHERE id = ?",
@@ -223,6 +231,7 @@ class CortexEngine(SyncCompatMixin):
 
     def export_snapshot(self, out_path: str | Path) -> str:
         from cortex.sync.snapshot import export_snapshot
+
         return export_snapshot(self, out_path)
 
     @staticmethod

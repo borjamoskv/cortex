@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESCUELA DE AGENTES - MOSKV-1 Security</title>
+    <link rel="stylesheet" href="css/tokens.css">
+    <link rel="stylesheet" href="css/school.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=JetBrains+Mono&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="scanline"></div>
+    <div class="noise"></div>
+
+    <header class="main-header">
+        <div class="logo">
+            <span class="logo-symbol">🛡️</span>
+            <h1>CORTEX <span class="accent">SECURITY SCHOOL</span></h1>
+        </div>
+        <nav class="status-bar">
+            <div class="status-item">
+                <span class="label">STATUS:</span>
+                <span class="value online">OPERATIVE</span>
+            </div>
+            <div class="status-item">
+                <span class="label">THREAT LEVEL:</span>
+                <span class="value high">ELEVATED</span>
+            </div>
+        </nav>
+    </header>
+
+    <main class="dashboard-grid">
+        <aside class="sidebar-panels">
+            <section class="panel catedraticos">
+                <div class="panel-header">
+                    <h2>CATEDRÁTICOS</h2>
+                </div>
+                <div class="panel-content professors-list">
+                    <!-- Populated by school.js -->
+                </div>
+            </section>
+
+            <section class="panel agent-roster">
+                <div class="panel-header">
+                    <h2>AGENT ROSTER</h2>
+                    <span class="count">SENTIENT NODES</span>
+                </div>
+                <div class="panel-content scrollable">
+                    <!-- Populated by school.js -->
+                </div>
+            </section>
+        </aside>
+
+        <section class="panel mission-hub">
+            <div class="panel-header">
+                <h2>NOBLE MISSION HUB</h2>
+            </div>
+            <div class="panel-content">
+                <div class="mission-item priority-high">
+                    <div class="mission-tag">SQL INJECTION</div>
+                    <p>Audit and patch `engine.py` temporal filters. Protect CORTEX's history.</p>
+                    <button class="btn-primary">START TRAINING</button>
+                </div>
+                <div class="mission-item priority-high">
+                    <div class="mission-tag">CORS POLICY</div>
+                    <p>Restrict wildcard access in `api.py`. Guard the soul's perimeter.</p>
+                    <button class="btn-primary">START TRAINING</button>
+                </div>
+                <div class="mission-item special">
+                    <div class="mission-tag">SOUL SYNC</div>
+                    <p>Ensure agent decisions align with CORTEX's noble purpose.</p>
+                    <button class="btn-primary">SYNCHRONIZE</button>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel terminal-panel">
+            <div class="panel-header">
+                <h2>SENTIENCE CONSOLE</h2>
+            </div>
+            <div class="panel-content terminal">
+                <!-- Initialized by school.js -->
+            </div>
+        </section>
+    </main>
+
+    <script src="js/school.js"></script>
+</body>
+</html>

@@ -10,30 +10,70 @@ from typing import Optional
 
 CATEGORY_MAP: dict[str, str] = {
     # Coding
-    ".py": "coding", ".js": "coding", ".ts": "coding", ".tsx": "coding",
-    ".jsx": "coding", ".swift": "coding", ".rs": "coding", ".go": "coding",
-    ".java": "coding", ".kt": "coding", ".c": "coding", ".cpp": "coding",
-    ".h": "coding", ".rb": "coding", ".php": "coding", ".cs": "coding",
-    ".css": "coding", ".scss": "coding", ".less": "coding",
-    ".html": "coding", ".vue": "coding", ".svelte": "coding",
-    ".sql": "coding", ".sh": "coding", ".bash": "coding",
+    ".py": "coding",
+    ".js": "coding",
+    ".ts": "coding",
+    ".tsx": "coding",
+    ".jsx": "coding",
+    ".swift": "coding",
+    ".rs": "coding",
+    ".go": "coding",
+    ".java": "coding",
+    ".kt": "coding",
+    ".c": "coding",
+    ".cpp": "coding",
+    ".h": "coding",
+    ".rb": "coding",
+    ".php": "coding",
+    ".cs": "coding",
+    ".css": "coding",
+    ".scss": "coding",
+    ".less": "coding",
+    ".html": "coding",
+    ".vue": "coding",
+    ".svelte": "coding",
+    ".sql": "coding",
+    ".sh": "coding",
+    ".bash": "coding",
     # Docs
-    ".md": "docs", ".txt": "docs", ".rst": "docs", ".adoc": "docs",
-    ".pdf": "docs", ".doc": "docs", ".docx": "docs",
+    ".md": "docs",
+    ".txt": "docs",
+    ".rst": "docs",
+    ".adoc": "docs",
+    ".pdf": "docs",
+    ".doc": "docs",
+    ".docx": "docs",
     # Config
-    ".json": "coding", ".yaml": "coding", ".yml": "coding",
-    ".toml": "coding", ".ini": "coding", ".env": "coding",
+    ".json": "coding",
+    ".yaml": "coding",
+    ".yml": "coding",
+    ".toml": "coding",
+    ".ini": "coding",
+    ".env": "coding",
 }
 
 ENTITY_KEYWORDS: dict[str, str] = {
-    "test_": "testing", "_test.": "testing", ".test.": "testing",
-    ".spec.": "testing", "spec_": "testing",
-    "slack": "comms", "discord": "comms", "teams": "comms",
-    "outlook": "comms", "gmail": "comms", "mail": "comms",
-    "zoom": "comms", "meet": "comms",
-    "debug": "debugging", "debugger": "debugging",
-    "review": "review", "pr": "review", "diff": "review",
-    "docs.": "docs", "stackoverflow": "docs", "mdn": "docs",
+    "test_": "testing",
+    "_test.": "testing",
+    ".test.": "testing",
+    ".spec.": "testing",
+    "spec_": "testing",
+    "slack": "comms",
+    "discord": "comms",
+    "teams": "comms",
+    "outlook": "comms",
+    "gmail": "comms",
+    "mail": "comms",
+    "zoom": "comms",
+    "meet": "comms",
+    "debug": "debugging",
+    "debugger": "debugging",
+    "review": "review",
+    "pr": "review",
+    "diff": "review",
+    "docs.": "docs",
+    "stackoverflow": "docs",
+    "mdn": "docs",
 }
 
 DEFAULT_GAP_SECONDS = 300
@@ -59,6 +99,7 @@ def classify_entity(entity: str) -> str:
 @dataclass
 class Heartbeat:
     """A single activity pulse."""
+
     id: int
     project: str
     entity: str
@@ -72,6 +113,7 @@ class Heartbeat:
 @dataclass
 class TimeEntry:
     """A continuous block of activity."""
+
     id: int
     project: str
     category: str
@@ -86,6 +128,7 @@ class TimeEntry:
 @dataclass
 class TimeSummary:
     """Aggregated time report."""
+
     total_seconds: int
     by_category: dict[str, int]
     by_project: dict[str, int]

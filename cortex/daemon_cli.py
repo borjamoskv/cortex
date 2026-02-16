@@ -14,7 +14,6 @@ Commands:
 
 from __future__ import annotations
 
-import json
 import logging
 import shutil
 import sys
@@ -137,10 +136,12 @@ def check(ctx: click.Context) -> None:
 
     # Header
     console.print()
-    console.print(Panel(
-        "[bold]MOSKV-1 DAEMON — CHECK[/]",
-        border_style="cyan",
-    ))
+    console.print(
+        Panel(
+            "[bold]MOSKV-1 DAEMON — CHECK[/]",
+            border_style="cyan",
+        )
+    )
 
     # Sites
     site_table = Table(title="▸ Sites", show_header=True, header_style="bold")
@@ -247,6 +248,7 @@ def install() -> None:
     console.print(f"[green]✅ Installed:[/] {PLIST_DEST}")
 
     import subprocess
+
     subprocess.run(["launchctl", "load", str(PLIST_DEST)], check=False)
     console.print(f"[green]✅ Loaded:[/] {BUNDLE_ID}")
     console.print("[dim]   Daemon will run every 5 minutes and on login.[/]")

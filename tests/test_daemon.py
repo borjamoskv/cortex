@@ -3,13 +3,10 @@
 from __future__ import annotations
 
 import json
-import time
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import httpx
-import pytest
 
 from cortex.daemon import (
     CertAlert,
@@ -21,7 +18,6 @@ from cortex.daemon import (
     EngineHealthCheck,
     GhostAlert,
     GhostWatcher,
-    MemoryAlert,
     MemorySyncer,
     MoskvDaemon,
     Notifier,
@@ -56,14 +52,18 @@ class TestGhostWatcher:
     def test_detects_stale(self, tmp_path):
         ghosts_file = tmp_path / "ghosts.json"
         stale_time = (datetime.now(timezone.utc) - timedelta(hours=72)).isoformat()
-        ghosts_file.write_text(json.dumps({
-            "old-project": {
-                "last_task": "something",
-                "timestamp": stale_time,
-                "mood": "dormant",
-                "blocked_by": None,
-            }
-        }))
+        ghosts_file.write_text(
+            json.dumps(
+                {
+                    "old-project": {
+                        "last_task": "something",
+                        "timestamp": stale_time,
+                        "mood": "dormant",
+                        "blocked_by": None,
+                    }
+                }
+            )
+        )
 
         watcher = GhostWatcher(ghosts_path=ghosts_file, stale_hours=48)
         alerts = watcher.check()
@@ -74,12 +74,16 @@ class TestGhostWatcher:
     def test_ignores_recent(self, tmp_path):
         ghosts_file = tmp_path / "ghosts.json"
         recent = datetime.now(timezone.utc).isoformat()
-        ghosts_file.write_text(json.dumps({
-            "active-project": {
-                "timestamp": recent,
-                "blocked_by": None,
-            }
-        }))
+        ghosts_file.write_text(
+            json.dumps(
+                {
+                    "active-project": {
+                        "timestamp": recent,
+                        "blocked_by": None,
+                    }
+                }
+            )
+        )
 
         watcher = GhostWatcher(ghosts_path=ghosts_file, stale_hours=48)
         assert watcher.check() == []
@@ -87,12 +91,16 @@ class TestGhostWatcher:
     def test_ignores_blocked(self, tmp_path):
         ghosts_file = tmp_path / "ghosts.json"
         stale_time = (datetime.now(timezone.utc) - timedelta(hours=100)).isoformat()
-        ghosts_file.write_text(json.dumps({
-            "blocked-project": {
-                "timestamp": stale_time,
-                "blocked_by": "waiting for API key",
-            }
-        }))
+        ghosts_file.write_text(
+            json.dumps(
+                {
+                    "blocked-project": {
+                        "timestamp": stale_time,
+                        "blocked_by": "waiting for API key",
+                    }
+                }
+            )
+        )
 
         watcher = GhostWatcher(ghosts_path=ghosts_file, stale_hours=48)
         assert watcher.check() == []
@@ -109,9 +117,7 @@ class TestMemorySyncer:
     def test_detects_stale(self, tmp_path):
         sys_file = tmp_path / "system.json"
         stale_time = (datetime.now(timezone.utc) - timedelta(hours=30)).isoformat()
-        sys_file.write_text(json.dumps({
-            "meta": {"last_updated": stale_time}
-        }))
+        sys_file.write_text(json.dumps({"meta": {"last_updated": stale_time}}))
 
         syncer = MemorySyncer(system_path=sys_file, stale_hours=24)
         alerts = syncer.check()
@@ -120,9 +126,9 @@ class TestMemorySyncer:
 
     def test_fresh_is_ok(self, tmp_path):
         sys_file = tmp_path / "system.json"
-        sys_file.write_text(json.dumps({
-            "meta": {"last_updated": datetime.now(timezone.utc).isoformat()}
-        }))
+        sys_file.write_text(
+            json.dumps({"meta": {"last_updated": datetime.now(timezone.utc).isoformat()}})
+        )
 
         syncer = MemorySyncer(system_path=sys_file, stale_hours=24)
         assert syncer.check() == []
@@ -299,9 +305,7 @@ class TestCertMonitor:
     @patch("cortex.daemon.ssl.create_default_context")
     def test_expiring_cert(self, mock_ctx, mock_conn):
         """Cert expiring in 5 days should trigger alert."""
-        expires = (datetime.now(timezone.utc) + timedelta(days=5)).strftime(
-            "%b %d %H:%M:%S %Y GMT"
-        )
+        expires = (datetime.now(timezone.utc) + timedelta(days=5)).strftime("%b %d %H:%M:%S %Y GMT")
         mock_ssock = MagicMock()
         mock_ssock.getpeercert.return_value = {"notAfter": expires}
         mock_ssock.__enter__ = lambda s: s
@@ -349,9 +353,9 @@ class TestCooldown:
     def test_alert_cooldown(self, tmp_path):
         """Same alert key should be rate-limited by cooldown."""
         (tmp_path / "ghosts.json").write_text("{}")
-        (tmp_path / "system.json").write_text(json.dumps({
-            "meta": {"last_updated": datetime.now(timezone.utc).isoformat()}
-        }))
+        (tmp_path / "system.json").write_text(
+            json.dumps({"meta": {"last_updated": datetime.now(timezone.utc).isoformat()}})
+        )
 
         daemon = MoskvDaemon(sites=[], config_dir=tmp_path, notify=True, cooldown=3600)
         # First call → should alert
@@ -369,15 +373,16 @@ class TestCheckDuration:
     def test_check_records_duration(self, tmp_path):
         """check() should record check_duration_ms > 0."""
         import cortex.daemon as daemon_mod
+
         original = daemon_mod.STATUS_FILE
 
         try:
             daemon_mod.STATUS_FILE = tmp_path / "status.json"
 
             (tmp_path / "ghosts.json").write_text("{}")
-            (tmp_path / "system.json").write_text(json.dumps({
-                "meta": {"last_updated": datetime.now(timezone.utc).isoformat()}
-            }))
+            (tmp_path / "system.json").write_text(
+                json.dumps({"meta": {"last_updated": datetime.now(timezone.utc).isoformat()}})
+            )
 
             daemon = MoskvDaemon(sites=[], config_dir=tmp_path, notify=False)
             with patch.object(daemon.site_monitor, "check_all", return_value=[]):
@@ -399,12 +404,8 @@ class TestMoskvDaemon:
 
         # Create fresh data
         now = datetime.now(timezone.utc).isoformat()
-        ghosts.write_text(json.dumps({
-            "project-a": {"timestamp": now, "blocked_by": None}
-        }))
-        system.write_text(json.dumps({
-            "meta": {"last_updated": now}
-        }))
+        ghosts.write_text(json.dumps({"project-a": {"timestamp": now, "blocked_by": None}}))
+        system.write_text(json.dumps({"meta": {"last_updated": now}}))
 
         daemon = MoskvDaemon(
             sites=["https://httpbin.org/status/200"],
@@ -412,9 +413,13 @@ class TestMoskvDaemon:
             notify=False,
         )
 
-        with patch.object(daemon.site_monitor, "check_all", return_value=[
-            SiteStatus(url="https://httpbin.org/status/200", healthy=True, status_code=200)
-        ]):
+        with patch.object(
+            daemon.site_monitor,
+            "check_all",
+            return_value=[
+                SiteStatus(url="https://httpbin.org/status/200", healthy=True, status_code=200)
+            ],
+        ):
             status = daemon.check()
 
         assert len(status.sites) == 1
@@ -425,6 +430,7 @@ class TestMoskvDaemon:
     def test_status_persistence(self, tmp_path):
         """Verify status is written to and read from disk."""
         import cortex.daemon as daemon_mod
+
         original = daemon_mod.STATUS_FILE
 
         try:
@@ -438,9 +444,9 @@ class TestMoskvDaemon:
 
             # Create minimal files
             (tmp_path / "ghosts.json").write_text("{}")
-            (tmp_path / "system.json").write_text(json.dumps({
-                "meta": {"last_updated": datetime.now(timezone.utc).isoformat()}
-            }))
+            (tmp_path / "system.json").write_text(
+                json.dumps({"meta": {"last_updated": datetime.now(timezone.utc).isoformat()}})
+            )
 
             with patch.object(daemon.site_monitor, "check_all", return_value=[]):
                 daemon.check()

@@ -11,10 +11,9 @@ import json
 import sqlite3
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 
 # ═══ CLI try/finally resource safety ═══════════════════════════════
+
 
 class TestCLIResourceSafety:
     """Verify engine.close() is always called even when commands raise."""
@@ -32,6 +31,7 @@ class TestCLIResourceSafety:
         with patch("cortex.cli.core.get_engine", return_value=engine):
             from click.testing import CliRunner
             from cortex.cli import cli
+
             runner = CliRunner()
             result = runner.invoke(cli, ["search", "test query"])
             engine.close.assert_called_once()
@@ -44,6 +44,7 @@ class TestCLIResourceSafety:
         with patch("cortex.cli.core.get_engine", return_value=engine):
             from click.testing import CliRunner
             from cortex.cli import cli
+
             runner = CliRunner()
             result = runner.invoke(cli, ["recall", "test-project"])
             engine.close.assert_called_once()
@@ -56,6 +57,7 @@ class TestCLIResourceSafety:
         with patch("cortex.cli.core.get_engine", return_value=engine):
             from click.testing import CliRunner
             from cortex.cli import cli
+
             runner = CliRunner()
             result = runner.invoke(cli, ["history", "test-project"])
             engine.close.assert_called_once()
@@ -68,6 +70,7 @@ class TestCLIResourceSafety:
         with patch("cortex.cli.core.get_engine", return_value=engine):
             from click.testing import CliRunner
             from cortex.cli import cli
+
             runner = CliRunner()
             result = runner.invoke(cli, ["status"])
             engine.close.assert_called_once()
@@ -82,12 +85,14 @@ class TestCLIResourceSafety:
         with patch("cortex.cli.crud.get_engine", return_value=engine):
             from click.testing import CliRunner
             from cortex.cli import cli
+
             runner = CliRunner()
             result = runner.invoke(cli, ["list"])
             engine.close.assert_called_once()
 
 
 # ═══ CLI edit defensive JSON ══════════════════════════════════════
+
 
 class TestEditDefensiveJSON:
     """edit command should handle malformed tags_json gracefully."""
@@ -109,11 +114,14 @@ class TestEditDefensiveJSON:
         engine.deprecate.return_value = True
         engine.store.return_value = 42
 
-        with patch("cortex.cli.crud.get_engine", return_value=engine), \
-             patch("cortex.cli.crud.export_to_json") as mock_wb:
+        with (
+            patch("cortex.cli.crud.get_engine", return_value=engine),
+            patch("cortex.cli.crud.export_to_json") as mock_wb,
+        ):
             mock_wb.return_value = MagicMock(files_written=0)
             from click.testing import CliRunner
             from cortex.cli import cli
+
             runner = CliRunner()
             result = runner.invoke(cli, ["edit", "1", "new content"])
             engine.store.assert_called_once()
@@ -125,6 +133,7 @@ class TestEditDefensiveJSON:
 
 # ═══ Migration resilience ════════════════════════════════════════
 
+
 class TestMigrationResilience:
     """Migrations should handle errors gracefully."""
 
@@ -132,6 +141,7 @@ class TestMigrationResilience:
         """get_current_version should return 0 if schema_version table doesn't exist."""
         conn = sqlite3.connect(":memory:")
         from cortex.migrations import get_current_version
+
         assert get_current_version(conn) == 0
         conn.close()
 
@@ -158,11 +168,13 @@ class TestMigrationResilience:
         conn.commit()
 
         from cortex.migrations import get_current_version
+
         assert get_current_version(conn) == 1
         conn.close()
 
 
 # ═══ API error handling ══════════════════════════════════════════
+
 
 class TestAPIErrorHandling:
     """API should handle errors cleanly."""
@@ -182,12 +194,15 @@ class TestAPIErrorHandling:
     def test_app_has_rate_limiter(self):
         """API should have rate limiting middleware."""
         from cortex.api import app
-        middleware_classes = [m.cls.__name__ if hasattr(m, 'cls') else type(m).__name__
-                            for m in app.user_middleware]
+
+        middleware_classes = [
+            m.cls.__name__ if hasattr(m, "cls") else type(m).__name__ for m in app.user_middleware
+        ]
         assert any("RateLimit" in name for name in middleware_classes)
 
 
 # ═══ Async client parity ═════════════════════════════════════════
+
 
 class TestAsyncClientParity:
     """Verify async_client matches sync client error handling."""
@@ -205,6 +220,7 @@ class TestAsyncClientParity:
     def test_async_client_context_manager(self):
         """AsyncCortexClient should support async context manager."""
         from cortex.async_client import AsyncCortexClient
+
         assert hasattr(AsyncCortexClient, "__aenter__")
         assert hasattr(AsyncCortexClient, "__aexit__")
         assert hasattr(AsyncCortexClient, "close")

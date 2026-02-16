@@ -16,15 +16,12 @@ class Notifier:
     @staticmethod
     def notify(title: str, message: str, sound: str = "Submarine") -> bool:
         """Send a macOS notification. Returns True on success."""
-        script = (
-            f'display notification "{message}" '
-            f'with title "{title}" '
-            f'sound name "{sound}"'
-        )
+        script = f'display notification "{message}" with title "{title}" sound name "{sound}"'
         try:
             subprocess.run(
                 ["osascript", "-e", script],
-                capture_output=True, timeout=5,
+                capture_output=True,
+                timeout=5,
             )
             return True
         except (subprocess.SubprocessError, OSError) as e:

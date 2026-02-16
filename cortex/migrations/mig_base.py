@@ -6,9 +6,7 @@ logger = logging.getLogger("cortex")
 
 def _migration_001_add_updated_at(conn: sqlite3.Connection):
     """Add updated_at column to facts table if missing."""
-    columns = {
-        row[1] for row in conn.execute("PRAGMA table_info(facts)").fetchall()
-    }
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(facts)").fetchall()}
     if "updated_at" not in columns:
         conn.execute("ALTER TABLE facts ADD COLUMN updated_at TEXT")
         logger.info("Migration 001: Added 'updated_at' column to facts")
@@ -17,17 +15,10 @@ def _migration_001_add_updated_at(conn: sqlite3.Connection):
 def _migration_002_add_indexes(conn: sqlite3.Connection):
     """Add performance indexes."""
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_facts_project_active "
-        "ON facts(project, valid_until)"
+        "CREATE INDEX IF NOT EXISTS idx_facts_project_active ON facts(project, valid_until)"
     )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_facts_type "
-        "ON facts(fact_type)"
-    )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_facts_created "
-        "ON facts(created_at DESC)"
-    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_facts_type ON facts(fact_type)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_facts_created ON facts(created_at DESC)")
     logger.info("Migration 002: Added performance indexes")
 
 
@@ -54,10 +45,7 @@ def _migration_004_vector_index(conn: sqlite3.Connection):
             reason      TEXT DEFAULT 'deprecated'
         )
     """)
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_pruned_at "
-        "ON pruned_embeddings(pruned_at)"
-    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pruned_at ON pruned_embeddings(pruned_at)")
     logger.info("Migration 004: Created pruned_embeddings table (replaces dead IVF index)")
 
 

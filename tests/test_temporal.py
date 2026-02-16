@@ -4,8 +4,6 @@ CORTEX v4.0 — Temporal Module Tests.
 Tests for now_iso, is_valid_at and build_temporal_filter_params.
 """
 
-import pytest
-
 from cortex.temporal import build_temporal_filter_params, is_valid_at, now_iso
 
 

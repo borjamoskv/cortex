@@ -1,11 +1,10 @@
 import json
 import logging
-import os
 import shutil
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 import aiosqlite
 
@@ -13,9 +12,11 @@ from cortex.config import DEFAULT_DB_PATH
 
 logger = logging.getLogger("cortex")
 
+
 @dataclass
 class SnapshotRecord:
     """Metadata for a CORTEX snapshot."""
+
     id: int
     name: str
     path: str
@@ -24,10 +25,12 @@ class SnapshotRecord:
     created_at: str
     size_mb: float
 
+
 class SnapshotManager:
     """
     Manages physical and logical snapshots of the CORTEX database.
     """
+
     def __init__(self, db_path: str | Path = DEFAULT_DB_PATH):
         self.db_path = Path(db_path).expanduser()
         self.snapshot_dir = self.db_path.parent / "snapshots"
@@ -35,19 +38,19 @@ class SnapshotManager:
 
     async def create_snapshot(self, name: str, tx_id: int, merkle_root: str) -> SnapshotRecord:
         """Create a consistent physical snapshot of the current database.
-        
+
         Args:
             name: Descriptive name for the snapshot.
             tx_id: The latest transaction ID included in this snapshot.
             merkle_root: The Merkle Root of the ledger at this point.
-            
+
         Returns:
             SnapshotRecord containing metadata.
         """
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"cortex_snap_{ts}_{name}.db"
         dest_path = self.snapshot_dir / filename
-        
+
         # Use VACUUM INTO for a consistent backup of a live database in WAL mode
         async with aiosqlite.connect(str(self.db_path)) as conn:
             try:
@@ -59,9 +62,9 @@ class SnapshotManager:
             except Exception as e:
                 logger.error("Snapshot creation failed: %s", e)
                 raise
-            
+
         size_mb = round(dest_path.stat().st_size / (1024 * 1024), 2)
-        
+
         # We record the metadata in a alongside JSON file
         meta_path = dest_path.with_suffix(".json")
         record = {
@@ -70,21 +73,21 @@ class SnapshotManager:
             "merkle_root": merkle_root,
             "created_at": datetime.now().isoformat(),
             "size_mb": size_mb,
-            "path": str(dest_path)
+            "path": str(dest_path),
         }
-        
+
         # Using standard open since it's just a small JSON meta-file
         with open(meta_path, "w") as f:
             json.dump(record, f, indent=2)
-            
+
         return SnapshotRecord(
-            id=0, # Metadata ID
+            id=0,  # Metadata ID
             name=name,
             path=str(dest_path),
             tx_id=tx_id,
             merkle_root=merkle_root,
             created_at=record["created_at"],
-            size_mb=size_mb
+            size_mb=size_mb,
         )
 
     async def list_snapshots(self) -> List[SnapshotRecord]:
@@ -98,23 +101,25 @@ class SnapshotManager:
                     # Check if the DB file actually exists
                     db_file = Path(data["path"])
                     if db_file.exists():
-                        snapshots.append(SnapshotRecord(
-                            id=0,
-                            name=data["name"],
-                            path=data["path"],
-                            tx_id=data["tx_id"],
-                            merkle_root=data["merkle_root"],
-                            created_at=data["created_at"],
-                            size_mb=data["size_mb"]
-                        ))
+                        snapshots.append(
+                            SnapshotRecord(
+                                id=0,
+                                name=data["name"],
+                                path=data["path"],
+                                tx_id=data["tx_id"],
+                                merkle_root=data["merkle_root"],
+                                created_at=data["created_at"],
+                                size_mb=data["size_mb"],
+                            )
+                        )
             except Exception as e:
                 logger.warning("Failed to load snapshot metadata from %s: %s", meta_file, e)
-                
+
         return sorted(snapshots, key=lambda s: s.created_at, reverse=True)
 
     async def restore_snapshot(self, tx_id: int) -> bool:
         """Restore the database to a specific snapshot state.
-        
+
         WARNING: This overwrites the current database.
         """
         all_snapshots = await self.list_snapshots()
@@ -122,14 +127,14 @@ class SnapshotManager:
         if not snapshots:
             logger.error("No snapshot found for TX %d", tx_id)
             return False
-            
+
         snap = snapshots[0]
         logger.info("Restoring snapshot from %s", snap.path)
-        
+
         # Backup current DB before overwrite
         backup_path = self.db_path.with_suffix(".db.bak")
         shutil.copy2(self.db_path, backup_path)
-        
+
         try:
             shutil.copy2(snap.path, self.db_path)
             # We may need to remove WAL files as well

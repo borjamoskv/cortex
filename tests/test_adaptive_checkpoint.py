@@ -2,10 +2,10 @@
 
 Tests that the ledger dynamically adjusts batch size based on write rate.
 """
+
 import time
 import pytest
 import aiosqlite
-from unittest.mock import patch
 
 from cortex.config import CHECKPOINT_MIN, CHECKPOINT_MAX
 from cortex.engine.ledger import ImmutableLedger
@@ -104,7 +104,7 @@ class TestCheckpointWithAdaptiveBatch:
         for i in range(50):
             await ledger.conn.execute(
                 "INSERT INTO transactions (hash, prev_hash, project, content) VALUES (?, ?, ?, ?)",
-                (f"hash_{i}", f"hash_{i-1}" if i > 0 else None, "test", f"content_{i}")
+                (f"hash_{i}", f"hash_{i - 1}" if i > 0 else None, "test", f"content_{i}"),
             )
         await ledger.conn.commit()
 
@@ -124,7 +124,7 @@ class TestCheckpointWithAdaptiveBatch:
         for i in range(CHECKPOINT_MIN):
             await ledger.conn.execute(
                 "INSERT INTO transactions (hash, prev_hash, project, content) VALUES (?, ?, ?, ?)",
-                (f"hash_{i}", f"hash_{i-1}" if i > 0 else None, "test", f"content_{i}")
+                (f"hash_{i}", f"hash_{i - 1}" if i > 0 else None, "test", f"content_{i}"),
             )
         await ledger.conn.commit()
 

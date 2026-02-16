@@ -27,17 +27,20 @@ def sync(db) -> None:
         with console.status("[bold blue]Sincronizando memoria...[/]"):
             # Fix: Wrap async call
             result = _run_async(sync_memory(engine))
-        
+
         if result.had_changes:
-            console.print(Panel(
-                f"[bold green]✓ Sincronización completada[/]\n"
-                f"Facts: {result.facts_synced}\n"
-                f"Ghosts: {result.ghosts_synced}\n"
-                f"Errores: {result.errors_synced}\n"
-                f"Bridges: {result.bridges_synced}\n"
-                f"Omitidos (ya existían): {result.skipped}",
-                title="🔄 CORTEX Sync", border_style="green",
-            ))
+            console.print(
+                Panel(
+                    f"[bold green]✓ Sincronización completada[/]\n"
+                    f"Facts: {result.facts_synced}\n"
+                    f"Ghosts: {result.ghosts_synced}\n"
+                    f"Errores: {result.errors_synced}\n"
+                    f"Bridges: {result.bridges_synced}\n"
+                    f"Omitidos (ya existían): {result.skipped}",
+                    title="🔄 CORTEX Sync",
+                    border_style="green",
+                )
+            )
         else:
             console.print("[dim]Sin cambios desde la última sincronización.[/]")
         if result.errors:
@@ -71,17 +74,20 @@ def writeback(db) -> None:
     engine = get_engine(db)
     try:
         # export_to_json is synchronous in current implementation based on imports
-        # checking cortex.sync.write to be sure, but assuming it is sync for now 
+        # checking cortex.sync.write to be sure, but assuming it is sync for now
         # based on context. If it is async, it will fail and we fix.
         result = export_to_json(engine)
         if result.had_changes:
-            console.print(Panel(
-                f"[bold green]✓ Write-back completado[/]\n"
-                f"Archivos actualizados: {result.files_written}\n"
-                f"Archivos sin cambios: {result.files_skipped}\n"
-                f"Items exportados: {result.items_exported}",
-                title="🔄 CORTEX → JSON", border_style="cyan",
-            ))
+            console.print(
+                Panel(
+                    f"[bold green]✓ Write-back completado[/]\n"
+                    f"Archivos actualizados: {result.files_written}\n"
+                    f"Archivos sin cambios: {result.files_skipped}\n"
+                    f"Items exportados: {result.items_exported}",
+                    title="🔄 CORTEX → JSON",
+                    border_style="cyan",
+                )
+            )
         else:
             console.print(
                 "[dim]Sin cambios en DB desde el último write-back. "

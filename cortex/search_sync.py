@@ -92,16 +92,18 @@ def semantic_search_sync(
 
         # Convert distance to similarity score (1 - distance for cosine)
         score = max(0.0, 1.0 - (row[7] if row[7] else 0.0))
-        results.append(SyncSearchResult(
-            fact_id=row[0],
-            content=row[1],
-            project=row[2],
-            fact_type=row[3],
-            confidence=row[4],
-            source=row[5],
-            tags=tags,
-            score=score,
-        ))
+        results.append(
+            SyncSearchResult(
+                fact_id=row[0],
+                content=row[1],
+                project=row[2],
+                fact_type=row[3],
+                confidence=row[4],
+                source=row[5],
+                tags=tags,
+                score=score,
+            )
+        )
 
     return results
 
@@ -109,9 +111,7 @@ def semantic_search_sync(
 def _has_fts5_sync(conn: sqlite3.Connection) -> bool:
     """Check if facts_fts virtual table exists (sync)."""
     try:
-        cursor = conn.execute(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='facts_fts'"
-        )
+        cursor = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='facts_fts'")
         return cursor.fetchone() is not None
     except sqlite3.Error:
         return False
@@ -122,14 +122,16 @@ def _sanitize_fts_query(query: str) -> str:
     tokens = query.split()
     safe_tokens = []
     for token in tokens:
-        cleaned = token.replace('"', '').replace("'", "")
+        cleaned = token.replace('"', "").replace("'", "")
         if cleaned and cleaned.upper() not in ("AND", "OR", "NOT"):
             safe_tokens.append(f'"{cleaned}"')
     return " ".join(safe_tokens) if safe_tokens else f'"{query}"'
 
 
 def _build_fts_query(
-    query: str, project: Optional[str], limit: int,
+    query: str,
+    project: Optional[str],
+    limit: int,
 ) -> tuple[str, list]:
     """Build FTS5 MATCH query."""
     fts_query = _sanitize_fts_query(query)
@@ -151,7 +153,9 @@ def _build_fts_query(
 
 
 def _build_like_query(
-    query: str, project: Optional[str], limit: int,
+    query: str,
+    project: Optional[str],
+    limit: int,
 ) -> tuple[str, list]:
     """Build LIKE fallback query."""
     sql = """
@@ -233,10 +237,16 @@ def hybrid_search_sync(
         score(d) = Σ weight_i / (k + rank_i(d))
     """
     sem_results = semantic_search_sync(
-        conn, query_embedding, top_k=top_k * 2, project=project,
+        conn,
+        query_embedding,
+        top_k=top_k * 2,
+        project=project,
     )
     txt_results = text_search_sync(
-        conn, query, project=project, limit=top_k * 2,
+        conn,
+        query,
+        project=project,
+        limit=top_k * 2,
     )
 
     # Build RRF scores by fact_id
@@ -244,16 +254,14 @@ def hybrid_search_sync(
     result_map: dict[int, SyncSearchResult] = {}
 
     for rank, result in enumerate(sem_results):
-        rrf_scores[result.fact_id] = (
-            rrf_scores.get(result.fact_id, 0.0)
-            + vector_weight / (RRF_K + rank + 1)
+        rrf_scores[result.fact_id] = rrf_scores.get(result.fact_id, 0.0) + vector_weight / (
+            RRF_K + rank + 1
         )
         result_map[result.fact_id] = result
 
     for rank, result in enumerate(txt_results):
-        rrf_scores[result.fact_id] = (
-            rrf_scores.get(result.fact_id, 0.0)
-            + text_weight / (RRF_K + rank + 1)
+        rrf_scores[result.fact_id] = rrf_scores.get(result.fact_id, 0.0) + text_weight / (
+            RRF_K + rank + 1
         )
         if result.fact_id not in result_map:
             result_map[result.fact_id] = result
@@ -269,6 +277,8 @@ def hybrid_search_sync(
 
     logger.debug(
         "Hybrid search sync: %d semantic + %d text → %d merged (RRF)",
-        len(sem_results), len(txt_results), len(merged),
+        len(sem_results),
+        len(txt_results),
+        len(merged),
     )
     return merged

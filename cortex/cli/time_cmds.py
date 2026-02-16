@@ -62,8 +62,10 @@ def heartbeat_cmd(project, entity, category, branch, db) -> None:
         engine.init_db()
         t = get_tracker(engine)
         hb_id = t.heartbeat(
-            project=project, entity=entity,
-            category=category, branch=branch,
+            project=project,
+            entity=entity,
+            category=category,
+            branch=branch,
         )
         t.flush()
         console.print(f"[green]✓[/] Heartbeat [bold]#{hb_id}[/] → [cyan]{project}[/]/{entity}")

@@ -2,9 +2,8 @@
 
 Tests shard isolation, cross-shard search, tenant ID sanitization, and factory.
 """
+
 import pytest
-import asyncio
-from pathlib import Path
 from unittest.mock import patch
 
 from cortex.federation import FederatedEngine, get_engine
@@ -110,6 +109,7 @@ class TestEngineFactory:
         """Single mode should return standard CortexEngine."""
         engine = get_engine(auto_embed=False)
         from cortex.engine import CortexEngine
+
         assert isinstance(engine, CortexEngine)
 
     @patch("cortex.federation.FEDERATION_MODE", "federated")

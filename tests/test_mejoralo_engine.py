@@ -6,9 +6,6 @@ and stack detection.
 """
 
 import json
-import os
-import tempfile
-from pathlib import Path
 
 import pytest
 
@@ -65,9 +62,7 @@ class TestScan:
     def test_scan_scores_dimensions(self, mejoralo, tmp_path):
         """A clean Python file should score well."""
         (tmp_path / "pyproject.toml").write_text("[project]")
-        (tmp_path / "clean.py").write_text(
-            "def hello():\n    return 'world'\n"
-        )
+        (tmp_path / "clean.py").write_text("def hello():\n    return 'world'\n")
         result = mejoralo.scan("test-clean", str(tmp_path))
         assert 0 <= result.score <= 100
         assert result.stack == "python"
@@ -103,10 +98,7 @@ class TestScan:
     def test_security_detection(self, mejoralo, tmp_path):
         """Files with eval() should be flagged in security dimension."""
         (tmp_path / "pyproject.toml").write_text("[project]")
-        (tmp_path / "unsafe.py").write_text(
-            "result = eval('1+1')\n"
-            "x = innerHTML\n"
-        )
+        (tmp_path / "unsafe.py").write_text("result = eval('1+1')\nx = innerHTML\n")
         result = mejoralo.scan("test-sec", str(tmp_path))
         sec = next(d for d in result.dimensions if d.name == "Seguridad")
         assert sec.score < 100

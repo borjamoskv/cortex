@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -31,6 +30,7 @@ BUNDLE_ID = "com.moskv.daemon"
 @dataclass
 class SiteStatus:
     """Result of a single site health check."""
+
     url: str
     healthy: bool
     status_code: int = 0
@@ -42,6 +42,7 @@ class SiteStatus:
 @dataclass
 class GhostAlert:
     """A stale project detected from ghosts.json."""
+
     project: str
     last_activity: str
     hours_stale: float
@@ -52,6 +53,7 @@ class GhostAlert:
 @dataclass
 class MemoryAlert:
     """CORTEX memory freshness alert."""
+
     file: str
     last_updated: str
     hours_stale: float
@@ -60,6 +62,7 @@ class MemoryAlert:
 @dataclass
 class CertAlert:
     """SSL certificate expiry warning."""
+
     hostname: str
     expires_at: str
     days_remaining: int
@@ -68,6 +71,7 @@ class CertAlert:
 @dataclass
 class EngineHealthAlert:
     """CORTEX engine / database health issue."""
+
     issue: str
     detail: str = ""
 
@@ -75,6 +79,7 @@ class EngineHealthAlert:
 @dataclass
 class DiskAlert:
     """Disk usage warning for CORTEX data directory."""
+
     path: str
     size_mb: float
     threshold_mb: float
@@ -83,6 +88,7 @@ class DiskAlert:
 @dataclass
 class DaemonStatus:
     """Full daemon check result — persisted to disk."""
+
     checked_at: str
     check_duration_ms: float = 0.0
     sites: list[SiteStatus] = field(default_factory=list)
@@ -112,33 +118,42 @@ class DaemonStatus:
             "all_healthy": self.all_healthy,
             "sites": [
                 {
-                    "url": s.url, "healthy": s.healthy,
+                    "url": s.url,
+                    "healthy": s.healthy,
                     "status_code": s.status_code,
                     "response_ms": round(s.response_ms, 1),
-                    "error": s.error, "checked_at": s.checked_at,
+                    "error": s.error,
+                    "checked_at": s.checked_at,
                 }
                 for s in self.sites
             ],
             "stale_ghosts": [
                 {
-                    "project": g.project, "last_activity": g.last_activity,
+                    "project": g.project,
+                    "last_activity": g.last_activity,
                     "hours_stale": round(g.hours_stale, 1),
-                    "mood": g.mood, "blocked_by": g.blocked_by,
+                    "mood": g.mood,
+                    "blocked_by": g.blocked_by,
                 }
                 for g in self.stale_ghosts
             ],
             "memory_alerts": [
-                {"file": m.file, "last_updated": m.last_updated, "hours_stale": round(m.hours_stale, 1)}
+                {
+                    "file": m.file,
+                    "last_updated": m.last_updated,
+                    "hours_stale": round(m.hours_stale, 1),
+                }
                 for m in self.memory_alerts
             ],
             "cert_alerts": [
-                {"hostname": c.hostname, "expires_at": c.expires_at, "days_remaining": c.days_remaining}
+                {
+                    "hostname": c.hostname,
+                    "expires_at": c.expires_at,
+                    "days_remaining": c.days_remaining,
+                }
                 for c in self.cert_alerts
             ],
-            "engine_alerts": [
-                {"issue": e.issue, "detail": e.detail}
-                for e in self.engine_alerts
-            ],
+            "engine_alerts": [{"issue": e.issue, "detail": e.detail} for e in self.engine_alerts],
             "disk_alerts": [
                 {"path": d.path, "size_mb": round(d.size_mb, 1), "threshold_mb": d.threshold_mb}
                 for d in self.disk_alerts

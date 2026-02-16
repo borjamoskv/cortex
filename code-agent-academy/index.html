@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CORTEX CODE ACADEMY</title>
+    <link rel="stylesheet" href="css/tokens.css">
+    <link rel="stylesheet" href="css/academy.css">
+</head>
+<body>
+    <div class="scanline"></div>
+    
+    <header class="main-header">
+        <div class="logo">
+            <h1>CORTEX <span class="accent">CODE ACADEMY</span></h1>
+        </div>
+        <div class="status-bar">
+            <div class="status-item">
+                <span class="label">SYSTEM</span>
+                <span class="value online">OPTIMIZED</span>
+            </div>
+            <div class="status-item">
+                <span class="label">COMPLEXITY</span>
+                <span class="value low">O(1)</span>
+            </div>
+            <div class="status-item">
+                <span class="label">ACTIVE ARCHITECTS</span>
+                <span class="value">2</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="dashboard-grid">
+        <aside class="sidebar-panels">
+            <section class="panel catedraticos">
+                <div class="panel-header">
+                    <h2>ARCHITECTS</h2>
+                </div>
+                <div class="panel-content professors-list">
+                    <!-- Populated by academy.js -->
+                </div>
+            </section>
+
+            <section class="panel agent-roster">
+                <div class="panel-header">
+                    <h2>CODER ROSTER</h2>
+                    <span class="count">REFACTORING NODES</span>
+                </div>
+                <div class="panel-content scrollable">
+                    <!-- Populated by academy.js -->
+                </div>
+            </section>
+        </aside>
+
+        <section class="panel mission-hub">
+            <div class="panel-header">
+                <h2>REFACTORING DOJO</h2>
+                <div class="mission-stats">
+                    <span>ACTIVE CHALLENGES: <span class="accent">3</span></span>
+                </div>
+            </div>
+            <div class="panel-content" id="mission-container">
+                <!-- Missions populated here -->
+                <div class="mission-item" id="m1">
+                    <div class="mission-tag">COMPLEXITY REDUCTION</div>
+                    <h3>Legacy Monolith Refactor</h3>
+                    <p>Reduce cyclomatic complexity of `legacy_core.py` from 45 to < 10.</p>
+                    <button class="btn-primary">START REFACTOR</button>
+                </div>
+                <div class="mission-item" id="m2">
+                    <div class="mission-tag">PATTERN IMPLEMENTATION</div>
+                    <h3>Singleton to Dependency Injection</h3>
+                    <p>Migrate global state usage to DI container in `services/` module.</p>
+                    <button class="btn-primary">START MIGRATION</button>
+                </div>
+                <div class="mission-item critical" id="m3">
+                    <div class="mission-tag">PERFORMANCE OPTIMIZATION</div>
+                    <h3>Async IO Blocking Detection</h3>
+                    <p>Identify and fix blocking calls in the main event loop.</p>
+                    <button class="btn-primary">START PROFILING</button>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel terminal-panel">
+            <div class="panel-header">
+                <h2>COMPILER OUTPUT</h2>
+                <div class="console-controls">
+                    <span class="indicator">LIVE</span>
+                </div>
+            </div>
+            <div class="panel-content terminal">
+                <!-- Logs will appear here -->
+            </div>
+        </section>
+    </main>
+
+    <script src="js/academy.js"></script>
+</body>
+</html>

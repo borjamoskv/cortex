@@ -4,6 +4,7 @@
 # Change Date: 2030-01-01 (Transitions to Apache 2.0)
 
 """Vector search implementation."""
+
 import json
 import logging
 import sqlite3
@@ -75,13 +76,25 @@ async def semantic_search(
 
         score = 1.0 - (row[10] if row[10] else 0.0)
 
-        results.append(SearchResult(
-            fact_id=row[0], content=row[1], project=row[2],
-            fact_type=row[3], confidence=row[4], valid_from=row[5],
-            valid_until=row[6], tags=tags, source=row[8],
-            meta=meta, score=score, created_at=row[11],
-            updated_at=row[12], tx_id=row[13], hash=row[14]
-        ))
+        results.append(
+            SearchResult(
+                fact_id=row[0],
+                content=row[1],
+                project=row[2],
+                fact_type=row[3],
+                confidence=row[4],
+                valid_from=row[5],
+                valid_until=row[6],
+                tags=tags,
+                source=row[8],
+                meta=meta,
+                score=score,
+                created_at=row[11],
+                updated_at=row[12],
+                tx_id=row[13],
+                hash=row[14],
+            )
+        )
     return results
 
 
@@ -124,11 +137,20 @@ def semantic_search_sync(
         except (json.JSONDecodeError, TypeError):
             tags = []
         score = 1.0 - (row[7] if row[7] else 0.0)
-        results.append(SearchResult(
-            fact_id=row[0], content=row[1], project=row[2],
-            fact_type=row[3], confidence=row[4], source=row[5],
-            tags=tags, score=score,
-            valid_from="unknown", valid_until=None, created_at="unknown",
-            updated_at="unknown"
-        ))
+        results.append(
+            SearchResult(
+                fact_id=row[0],
+                content=row[1],
+                project=row[2],
+                fact_type=row[3],
+                confidence=row[4],
+                source=row[5],
+                tags=tags,
+                score=score,
+                valid_from="unknown",
+                valid_until=None,
+                created_at="unknown",
+                updated_at="unknown",
+            )
+        )
     return results

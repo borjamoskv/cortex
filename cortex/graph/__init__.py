@@ -2,6 +2,7 @@
 
 Entities, Relationships, and Graph Processing.
 """
+
 from cortex.graph.backends import GraphBackend, Neo4jBackend, SQLiteBackend
 from cortex.graph.engine import (
     detect_relationships,
@@ -13,6 +14,8 @@ from cortex.graph.engine import (
     process_fact_graph_sync,
     query_entity,
     query_entity_sync,
+    find_path,
+    get_context_subgraph,
 )
 from cortex.graph.types import Entity, Ghost, Relationship
 
@@ -31,6 +34,7 @@ __all__ = [
     "get_graph_sync",
     "query_entity",
     "query_entity_sync",
+    "find_path",
+    "get_context_subgraph",
     "get_backend",
 ]
-

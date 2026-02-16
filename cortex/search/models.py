@@ -4,6 +4,7 @@
 # Change Date: 2030-01-01 (Transitions to Apache 2.0)
 
 """Search result models."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -29,6 +30,7 @@ class SearchResult:
     meta: dict = field(default_factory=dict)
     tx_id: Optional[int] = None
     hash: Optional[str] = None
+    graph_context: Optional[dict] = field(default=None)
 
     def to_dict(self) -> dict:
         return {

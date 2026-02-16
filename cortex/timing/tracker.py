@@ -69,9 +69,7 @@ class TimingTracker:
         with self._lock:
             gap = gap_seconds or self._gap_seconds
 
-        latest_end = self._conn.execute(
-            "SELECT MAX(end_time) FROM time_entries"
-        ).fetchone()[0]
+        latest_end = self._conn.execute("SELECT MAX(end_time) FROM time_entries").fetchone()[0]
 
         if latest_end:
             rows = self._conn.execute(
@@ -163,8 +161,12 @@ class TimingTracker:
         ).fetchall()
         return [
             TimeEntry(
-                id=r[0], project=r[1], category=r[2],
-                start_time=r[3], end_time=r[4], duration_s=r[5],
+                id=r[0],
+                project=r[1],
+                category=r[2],
+                start_time=r[3],
+                end_time=r[4],
+                duration_s=r[5],
                 entities=json.loads(r[6]) if r[6] else [],
                 heartbeats=r[7],
                 meta=json.loads(r[8]) if r[8] else {},
@@ -183,7 +185,7 @@ class TimingTracker:
         rows = self._conn.execute(
             "SELECT substr(start_time, 1, 10) as date, SUM(duration_s) "
             "FROM time_entries WHERE start_time >= ? GROUP BY date",
-            (cutoff,)
+            (cutoff,),
         ).fetchall()
         for r in rows:
             if r[0] in date_map:
@@ -224,9 +226,12 @@ class TimingTracker:
                 entity_counts[entity] = entity_counts.get(entity, 0) + 1
         top_entities = sorted(entity_counts.items(), key=lambda x: x[1], reverse=True)[:10]
         return TimeSummary(
-            total_seconds=total_seconds, by_category=by_category,
-            by_project=by_project, entries=entries,
-            heartbeats=total_heartbeats, top_entities=top_entities,
+            total_seconds=total_seconds,
+            by_category=by_category,
+            by_project=by_project,
+            entries=entries,
+            heartbeats=total_heartbeats,
+            top_entities=top_entities,
         )
 
     def _safe_json_list(self, val) -> list:

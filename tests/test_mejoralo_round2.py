@@ -5,16 +5,13 @@ Tests for robustness improvements: sync error resilience,
 engine input validation, defensive JSON parsing, exception-safe close.
 """
 
-import cortex  # Trigger pysqlite3 patch
-import json
 import sqlite3
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from cortex.engine import CortexEngine, Fact
-from cortex.sync import export_to_json, sync_memory, SyncResult
+from cortex.engine import CortexEngine
+from cortex.sync import export_to_json, sync_memory
 
 
 # ─── Fixtures ────────────────────────────────────────────────────────
@@ -120,22 +117,52 @@ class TestRowToFact:
 
     def test_malformed_tags_json(self):
         """Corrupt JSON in tags field should fall back to empty list."""
-        row = (1, "proj", "content", "knowledge", "{not-valid-json}",
-               "stated", "2026-01-01T00:00:00+00:00", None, None, None)
+        row = (
+            1,
+            "proj",
+            "content",
+            "knowledge",
+            "{not-valid-json}",
+            "stated",
+            "2026-01-01T00:00:00+00:00",
+            None,
+            None,
+            None,
+        )
         fact = CortexEngine._row_to_fact(row)
         assert fact.tags == []
 
     def test_malformed_meta_json(self):
         """Corrupt JSON in meta field should fall back to empty dict."""
-        row = (1, "proj", "content", "knowledge", "[]",
-               "stated", "2026-01-01T00:00:00+00:00", None, None, "{corrupt}")
+        row = (
+            1,
+            "proj",
+            "content",
+            "knowledge",
+            "[]",
+            "stated",
+            "2026-01-01T00:00:00+00:00",
+            None,
+            None,
+            "{corrupt}",
+        )
         fact = CortexEngine._row_to_fact(row)
         assert fact.meta == {}
 
     def test_none_tags_and_meta(self):
         """None tags and meta should produce safe defaults."""
-        row = (1, "proj", "content", "knowledge", None,
-               "stated", "2026-01-01T00:00:00+00:00", None, None, None)
+        row = (
+            1,
+            "proj",
+            "content",
+            "knowledge",
+            None,
+            "stated",
+            "2026-01-01T00:00:00+00:00",
+            None,
+            None,
+            None,
+        )
         fact = CortexEngine._row_to_fact(row)
         assert fact.tags == []
         assert fact.meta == {}

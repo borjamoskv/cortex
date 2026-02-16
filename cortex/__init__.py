@@ -9,8 +9,8 @@ import sys
 
 try:
     # Use pysqlite3 if available (allows newer SQLite versions + extensions)
-    __import__('pysqlite3')
-    sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+    __import__("pysqlite3")
+    sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
 except ImportError:
     pass
 

@@ -7,10 +7,6 @@ Covers:
 - Time travel reconstruction
 """
 
-import asyncio
-import hashlib
-import json
-import os
 import pytest
 import tempfile
 from pathlib import Path
@@ -47,6 +43,7 @@ class TestCanonicalJson:
     def test_default_str_fallback(self):
         """Non-serializable objects get str() fallback."""
         from datetime import datetime
+
         result = canonical_json({"ts": datetime(2026, 1, 1)})
         assert "2026" in result
 
@@ -223,9 +220,7 @@ async def test_time_travel_reconstruction(tmp_db):
 
     # Get the transaction ID at this point
     conn = await engine.get_conn()
-    cursor = await conn.execute(
-        "SELECT MAX(id) FROM transactions"
-    )
+    cursor = await conn.execute("SELECT MAX(id) FROM transactions")
     tx_before_deprecation = (await cursor.fetchone())[0]
 
     # Deprecate fact 1

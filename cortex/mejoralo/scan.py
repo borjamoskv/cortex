@@ -63,24 +63,26 @@ def scan(project: str, path: str | Path, deep: bool = False) -> ScanResult:
 
         # Psi: toxic markers
         for match in PSI_PATTERNS.finditer(content):
-            line_no = content[:match.start()].count("\n") + 1
+            line_no = content[: match.start()].count("\n") + 1
             psi_findings.append(f"{rel}:{line_no} → {match.group()}")
 
         # Security: dangerous patterns
         for match in SECURITY_PATTERNS.finditer(content):
-            line_no = content[:match.start()].count("\n") + 1
+            line_no = content[: match.start()].count("\n") + 1
             security_findings.append(f"{rel}:{line_no} → {match.group()}")
 
     # ── Score each dimension ─────────────────────────────────────
 
     # 1. Integrity — build check (simplified: presence of source files)
     integrity_score = 100 if source_files else 0
-    dimensions.append(DimensionResult(
-        name="Integridad",
-        score=integrity_score,
-        weight="critical",
-        findings=[] if source_files else ["No se encontraron archivos fuente"],
-    ))
+    dimensions.append(
+        DimensionResult(
+            name="Integridad",
+            score=integrity_score,
+            weight="critical",
+            findings=[] if source_files else ["No se encontraron archivos fuente"],
+        )
+    )
 
     # 2. Architecture — files > 300 LOC
     if not source_files:
@@ -88,12 +90,14 @@ def scan(project: str, path: str | Path, deep: bool = False) -> ScanResult:
     else:
         ratio_ok = 1 - (len(large_files) / len(source_files))
         arch_score = max(0, min(100, int(ratio_ok * 100)))
-    dimensions.append(DimensionResult(
-        name="Arquitectura",
-        score=arch_score,
-        weight="critical",
-        findings=large_files[:10],  # Cap at 10
-    ))
+    dimensions.append(
+        DimensionResult(
+            name="Arquitectura",
+            score=arch_score,
+            weight="critical",
+            findings=large_files[:10],  # Cap at 10
+        )
+    )
 
     # 3. Security
     if not source_files:
@@ -101,21 +105,25 @@ def scan(project: str, path: str | Path, deep: bool = False) -> ScanResult:
     else:
         sec_penalty = min(100, len(security_findings) * 15)
         sec_score = max(0, 100 - sec_penalty)
-    dimensions.append(DimensionResult(
-        name="Seguridad",
-        score=sec_score,
-        weight="critical",
-        findings=security_findings[:10],
-    ))
+    dimensions.append(
+        DimensionResult(
+            name="Seguridad",
+            score=sec_score,
+            weight="critical",
+            findings=security_findings[:10],
+        )
+    )
 
     # 4. Complexity (indentation depth proxy — simplified)
     complexity_score = 85 if source_files else 0
-    dimensions.append(DimensionResult(
-        name="Complejidad",
-        score=complexity_score,
-        weight="high",
-        findings=[],
-    ))
+    dimensions.append(
+        DimensionResult(
+            name="Complejidad",
+            score=complexity_score,
+            weight="high",
+            findings=[],
+        )
+    )
 
     # 13. Psi — toxic code markers
     if not source_files:
@@ -123,12 +131,14 @@ def scan(project: str, path: str | Path, deep: bool = False) -> ScanResult:
     else:
         psi_penalty = min(100, len(psi_findings) * 5)
         psi_score = max(0, 100 - psi_penalty)
-    dimensions.append(DimensionResult(
-        name="Psi",
-        score=psi_score,
-        weight="high",
-        findings=psi_findings[:15],
-    ))
+    dimensions.append(
+        DimensionResult(
+            name="Psi",
+            score=psi_score,
+            weight="high",
+            findings=psi_findings[:15],
+        )
+    )
 
     # ── Weighted total ───────────────────────────────────────────
     # Critical = 40% weight per dimension, High = 35%

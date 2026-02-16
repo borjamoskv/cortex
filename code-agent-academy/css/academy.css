@@ -1,0 +1,115 @@
+/* Code Academy Styles - reusing tokens but adjusting for IDE feel */
+
+:root {
+  --grid-size: 20px; /* Tighter grid for code precision */
+}
+
+body {
+  background-color: #0d0d0d;
+  background-image: 
+    linear-gradient(#1a1a1a 1px, transparent 1px),
+    linear-gradient(90deg, #1a1a1a 1px, transparent 1px);
+  background-size: var(--grid-size) var(--grid-size);
+  font-family: 'Fira Code', 'Roboto Mono', monospace; /* Enforce mono */
+}
+
+.scanline {
+  background: rgba(0, 255, 156, 0.05); /* Green tint for code matrix feel */
+}
+
+.logo h1 {
+  font-family: 'Inter', sans-serif; /* Keep logo readable */
+}
+
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    grid-template-rows: 1fr 300px;
+    gap: var(--space-md);
+    padding: var(--space-md);
+    height: calc(100vh - 80px); /* Adjust for header */
+}
+
+.sidebar-panels {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    overflow: hidden;
+}
+
+.panel {
+    background: rgba(10, 10, 10, 0.85);
+    border: 1px solid #333;
+}
+
+.panel-header {
+    border-bottom: 1px solid #333;
+}
+
+.panel-header h2 {
+    color: #4CAF50; /* Green for "Pass" / Code */
+}
+
+.mission-item {
+    border-left: 2px solid #555;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.mission-item:hover {
+    border-left-color: #4CAF50;
+}
+
+.mission-tag {
+    color: #ae81ff; /* Monokai Purple */
+}
+
+.btn-primary {
+    background: #00874e; /* Submit Green */
+}
+
+.btn-primary:hover {
+    background: #00a862;
+}
+
+/* Syntax Highlighting for Terminal */
+.line { 
+    color: #f8f8f2; 
+}
+.line span.keyword { color: #f92672; }
+.line span.string { color: #e6db74; }
+.line span.function { color: #66d9ef; }
+.line span.comment { color: #75715e; font-style: italic; }
+
+/* Professors */
+.professor-item {
+    border-bottom: 1px solid #222;
+    padding: 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.prof-avatar { font-size: 1.2rem; }
+.prof-info h4 { margin: 0; color: #66d9ef; font-size: 0.9rem; }
+.prof-info p { margin: 0; color: #75715e; font-size: 0.7rem; }
+
+/* Agents */
+.agent-card {
+    border-left: 3px solid #66d9ef; /* Blue for logic */
+    display: flex;
+    gap: 10px;
+    padding: 10px;
+    margin-bottom: 5px;
+    background: rgba(255,255,255,0.03);
+}
+
+.agent-rank { background: #222; color: #66d9ef; padding: 2px 5px; font-size: 0.7rem; }
+.agent-info h3 { margin: 0; font-size: 0.9rem; }
+.agent-status { font-size: 0.7rem; color: #aaa; }
+.agent-status.refactoring { color: #f92672; animation: pulse 1s infinite; }
+.reputation { color: #a6e22e; font-size: 0.8rem; }
+
+@keyframes pulse {
+    0% { opacity: 0.6; }
+    50% { opacity: 1; }
+    100% { opacity: 0.6; }
+}

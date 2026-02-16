@@ -3,6 +3,7 @@
 Provides synchronous versions of core operations for CLI, sync callers,
 and test utilities. Uses raw sqlite3 connections (not aiosqlite).
 """
+
 from __future__ import annotations
 
 import json
@@ -32,7 +33,9 @@ class SyncCompatMixin:
         """Get a raw sqlite3.Connection for sync callers."""
         if not hasattr(self, "_sync_conn") or self._sync_conn is None:
             self._sync_conn = _sqlite3.connect(
-                str(self._db_path), timeout=30, check_same_thread=False,
+                str(self._db_path),
+                timeout=30,
+                check_same_thread=False,
             )
             self._sync_conn.execute("PRAGMA journal_mode=WAL")
             self._sync_conn.execute("PRAGMA synchronous=NORMAL")
@@ -63,6 +66,7 @@ class SyncCompatMixin:
         conn.commit()
         run_migrations(conn)
         from cortex.engine import get_init_meta
+
         for k, v in get_init_meta():
             conn.execute(
                 "INSERT OR IGNORE INTO cortex_meta (key, value) VALUES (?, ?)",
@@ -93,16 +97,14 @@ class SyncCompatMixin:
             "INSERT INTO facts (project, content, fact_type, tags, confidence, "
             "valid_from, source, meta, created_at, updated_at) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (project, content, fact_type, tags_json, confidence,
-             ts, source, meta_json, ts, ts),
+            (project, content, fact_type, tags_json, confidence, ts, source, meta_json, ts, ts),
         )
         fact_id = cursor.lastrowid
         if self._auto_embed and self._vec_available:
             try:
                 embedding = self._get_embedder().embed(content)
                 conn.execute(
-                    "INSERT INTO fact_embeddings (fact_id, embedding) "
-                    "VALUES (?, ?)",
+                    "INSERT INTO fact_embeddings (fact_id, embedding) VALUES (?, ?)",
                     (fact_id, json.dumps(embedding)),
                 )
             except Exception as e:
@@ -112,6 +114,7 @@ class SyncCompatMixin:
         # Graph extraction (sync)
         try:
             from cortex.graph import process_fact_graph_sync
+
             process_fact_graph_sync(conn, fact_id, content, project, ts)
         except Exception as e:
             logger.warning("Graph extraction sync failed for fact %d: %s", fact_id, e)
@@ -141,7 +144,10 @@ class SyncCompatMixin:
             try:
                 embedding = self._get_embedder().embed(query)
                 results = semantic_search_sync(
-                    conn, embedding, top_k=top_k, project=project,
+                    conn,
+                    embedding,
+                    top_k=top_k,
+                    project=project,
                 )
                 if results:
                     return results
@@ -171,8 +177,11 @@ class SyncCompatMixin:
 
         embedding = self._get_embedder().embed(query)
         return hybrid_search_sync(
-            conn, query, embedding,
-            top_k=top_k, project=project,
+            conn,
+            query,
+            embedding,
+            top_k=top_k,
+            project=project,
             vector_weight=vector_weight,
             text_weight=text_weight,
         )
@@ -182,12 +191,14 @@ class SyncCompatMixin:
     def graph_sync(self, project: Optional[str] = None, limit: int = 50) -> dict:
         """Retrieve the graph synchronously."""
         from cortex.graph.backends.sqlite import SQLiteBackend
+
         conn = self._get_sync_conn()
         return SQLiteBackend(conn).get_graph_sync(project=project, limit=limit)
 
     def query_entity_sync(self, name: str, project: Optional[str] = None) -> Optional[dict]:
         """Query an entity and its connections synchronously."""
         from cortex.graph.backends.sqlite import SQLiteBackend
+
         conn = self._get_sync_conn()
         return SQLiteBackend(conn).query_entity_sync(name=name, project=project)
 
@@ -214,8 +225,7 @@ class SyncCompatMixin:
             )
         else:
             conn.execute(
-                "INSERT OR REPLACE INTO consensus_votes "
-                "(fact_id, agent, vote) VALUES (?, ?, ?)",
+                "INSERT OR REPLACE INTO consensus_votes (fact_id, agent, vote) VALUES (?, ?, ?)",
                 (fact_id, agent, value),
             )
         # Recalculate consensus score
@@ -227,14 +237,12 @@ class SyncCompatMixin:
         score = max(0.0, 1.0 + (vote_sum * 0.1))
         if score >= 1.5:
             conn.execute(
-                "UPDATE facts SET consensus_score = ?, confidence = 'verified' "
-                "WHERE id = ?",
+                "UPDATE facts SET consensus_score = ?, confidence = 'verified' WHERE id = ?",
                 (score, fact_id),
             )
         elif score <= 0.5:
             conn.execute(
-                "UPDATE facts SET consensus_score = ?, confidence = 'disputed' "
-                "WHERE id = ?",
+                "UPDATE facts SET consensus_score = ?, confidence = 'disputed' WHERE id = ?",
                 (score, fact_id),
             )
         else:
@@ -253,13 +261,11 @@ class SyncCompatMixin:
 
         dj = canonical_json(detail)
         ts = now_iso()
-        cursor = conn.execute(
-            "SELECT hash FROM transactions ORDER BY id DESC LIMIT 1"
-        )
+        cursor = conn.execute("SELECT hash FROM transactions ORDER BY id DESC LIMIT 1")
         prev = cursor.fetchone()
         ph = prev[0] if prev else "GENESIS"
         th = compute_tx_hash(ph, project, action, dj, ts)
-        
+
         c = conn.execute(
             "INSERT INTO transactions "
             "(project, action, detail, prev_hash, hash, timestamp) "
@@ -267,7 +273,7 @@ class SyncCompatMixin:
             (project, action, dj, ph, th, ts),
         )
         tx_id = c.lastrowid
-        
+
         # Note: Auto-checkpoint is skipped in sync mode for now to avoid complexity
         return tx_id
 
@@ -275,7 +281,7 @@ class SyncCompatMixin:
         """Synchronous version of deprecate."""
         if not isinstance(fact_id, int) or fact_id <= 0:
             raise ValueError("Invalid fact_id")
-        
+
         conn = self._get_sync_conn()
         ts = now_iso()
         cursor = conn.execute(
@@ -286,9 +292,7 @@ class SyncCompatMixin:
         )
 
         if cursor.rowcount > 0:
-            cursor = conn.execute(
-                "SELECT project FROM facts WHERE id = ?", (fact_id,)
-            )
+            cursor = conn.execute("SELECT project FROM facts WHERE id = ?", (fact_id,))
             row = cursor.fetchone()
             self._log_transaction_sync(
                 conn,
@@ -299,7 +303,7 @@ class SyncCompatMixin:
             # CDC: Encole for Neo4j sync (table graph_outbox)
             conn.execute(
                 "INSERT INTO graph_outbox (fact_id, action, status) VALUES (?, ?, ?)",
-                (fact_id, "deprecate_fact", "pending")
+                (fact_id, "deprecate_fact", "pending"),
             )
             conn.commit()
             return True
@@ -331,7 +335,7 @@ class SyncCompatMixin:
         if offset:
             query += " OFFSET ?"
             params.append(offset)
-        
+
         cursor = conn.execute(query, params)
         rows = cursor.fetchall()
         return [self._row_to_fact(row) for row in rows]
@@ -361,42 +365,32 @@ class SyncCompatMixin:
                 "ORDER BY f.valid_from DESC"
             )
             cursor = conn.execute(query, (project,))
-        
+
         rows = cursor.fetchall()
         return [self._row_to_fact(row) for row in rows]
 
     def stats_sync(self) -> dict:
         """Synchronous version of stats."""
         conn = self._get_sync_conn()
-        
+
         cursor = conn.execute("SELECT COUNT(*) FROM facts")
         total = cursor.fetchone()[0]
 
-        cursor = conn.execute(
-            "SELECT COUNT(*) FROM facts WHERE valid_until IS NULL"
-        )
+        cursor = conn.execute("SELECT COUNT(*) FROM facts WHERE valid_until IS NULL")
         active = cursor.fetchone()[0]
 
-        cursor = conn.execute(
-            "SELECT DISTINCT project FROM facts WHERE valid_until IS NULL"
-        )
+        cursor = conn.execute("SELECT DISTINCT project FROM facts WHERE valid_until IS NULL")
         projects = [p[0] for p in cursor.fetchall()]
 
         cursor = conn.execute(
-            "SELECT fact_type, COUNT(*) "
-            "FROM facts WHERE valid_until IS NULL "
-            "GROUP BY fact_type"
+            "SELECT fact_type, COUNT(*) FROM facts WHERE valid_until IS NULL GROUP BY fact_type"
         )
         types = dict(cursor.fetchall())
 
         cursor = conn.execute("SELECT COUNT(*) FROM transactions")
         tx_count = cursor.fetchone()[0]
 
-        db_size = (
-            self._db_path.stat().st_size / (1024 * 1024)
-            if self._db_path.exists()
-            else 0
-        )
+        db_size = self._db_path.stat().st_size / (1024 * 1024) if self._db_path.exists() else 0
 
         try:
             cursor = conn.execute("SELECT COUNT(*) FROM fact_embeddings")
@@ -417,9 +411,7 @@ class SyncCompatMixin:
             "db_size_mb": round(db_size, 2),
         }
 
-    def register_ghost_sync(
-        self, reference: str, context: str, project: str
-    ) -> int:
+    def register_ghost_sync(self, reference: str, context: str, project: str) -> int:
         """Register a ghost synchronously."""
         conn = self._get_sync_conn()
         cursor = conn.execute(

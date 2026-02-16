@@ -25,8 +25,9 @@ def record_session(
     content = (
         f"MEJORAlo v7.3: Sesión completada.\n"
         f"Score: {score_before} → {score_after} (Δ{delta:+d})\n"
-        f"Acciones:\n{actions_str}" if actions_str else
-        f"MEJORAlo v7.3: Sesión completada. Score: {score_before} → {score_after} (Δ{delta:+d})"
+        f"Acciones:\n{actions_str}"
+        if actions_str
+        else f"MEJORAlo v7.3: Sesión completada. Score: {score_before} → {score_after} (Δ{delta:+d})"
     )
 
     fact_id = engine.store(
@@ -67,13 +68,15 @@ def get_history(engine: CortexEngine, project: str, limit: int = 20) -> List[Dic
             meta = json.loads(row[3]) if row[3] else {}
         except (json.JSONDecodeError, TypeError):
             pass
-        results.append({
-            "id": row[0],
-            "content": row[1],
-            "created_at": row[2],
-            "score_before": meta.get("score_before"),
-            "score_after": meta.get("score_after"),
-            "delta": meta.get("delta"),
-            "actions": meta.get("actions", []),
-        })
+        results.append(
+            {
+                "id": row[0],
+                "content": row[1],
+                "created_at": row[2],
+                "score_before": meta.get("score_before"),
+                "score_after": meta.get("score_after"),
+                "delta": meta.get("delta"),
+                "actions": meta.get("actions", []),
+            }
+        )
     return results

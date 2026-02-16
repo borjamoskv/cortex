@@ -1,4 +1,5 @@
 """MEJORAlo Engine implementation."""
+
 import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -12,6 +13,7 @@ from .types import ScanResult, ShipResult
 from .utils import detect_stack
 
 logger = logging.getLogger("cortex.mejoralo")
+
 
 class MejoraloEngine:
     """MEJORAlo v7.3 engine — native CORTEX integration."""
@@ -46,9 +48,7 @@ class MejoraloEngine:
         """
         Record a MEJORAlo audit session in the CORTEX ledger.
         """
-        return record_session(
-            self.engine, project, score_before, score_after, actions
-        )
+        return record_session(self.engine, project, score_before, score_after, actions)
 
     # ── History ──────────────────────────────────────────────────────
 

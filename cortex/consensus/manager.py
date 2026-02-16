@@ -1,4 +1,5 @@
 """Consensus Sovereign Layer — ConsensusManager for CORTEX."""
+
 from __future__ import annotations
 
 import logging
@@ -39,14 +40,15 @@ class ConsensusManager:
             action = "unvote"
         else:
             await conn.execute(
-                "INSERT OR REPLACE INTO consensus_votes "
-                "(fact_id, agent, vote) VALUES (?, ?, ?)",
+                "INSERT OR REPLACE INTO consensus_votes (fact_id, agent, vote) VALUES (?, ?, ?)",
                 (fact_id, agent, value),
             )
             action = "vote"
 
         await self.engine._log_transaction(
-            conn, "consensus", action,
+            conn,
+            "consensus",
+            action,
             {"fact_id": fact_id, "agent": agent, "vote": value},
         )
         score = await self._recalculate_consensus(fact_id, conn)
@@ -113,7 +115,9 @@ class ConsensusManager:
             action = "vote_v2"
 
         await self.engine._log_transaction(
-            conn, "consensus", action,
+            conn,
+            "consensus",
+            action,
             {
                 "fact_id": fact_id,
                 "agent_id": agent_id,

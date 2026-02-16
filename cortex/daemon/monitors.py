@@ -38,7 +38,9 @@ logger = logging.getLogger("moskv-daemon")
 class SiteMonitor:
     """HTTP health checker for monitored URLs."""
 
-    def __init__(self, urls: list[str], timeout: float = DEFAULT_TIMEOUT, retries: int = DEFAULT_RETRIES):
+    def __init__(
+        self, urls: list[str], timeout: float = DEFAULT_TIMEOUT, retries: int = DEFAULT_RETRIES
+    ):
         self.urls = urls
         self.timeout = timeout
         self.retries = retries
@@ -58,8 +60,11 @@ class SiteMonitor:
                 elapsed = (time.monotonic() - start) * 1000
                 healthy = 200 <= resp.status_code < 400
                 return SiteStatus(
-                    url=url, healthy=healthy, status_code=resp.status_code,
-                    response_ms=elapsed, checked_at=now,
+                    url=url,
+                    healthy=healthy,
+                    status_code=resp.status_code,
+                    response_ms=elapsed,
+                    checked_at=now,
                     error="" if healthy else f"HTTP {resp.status_code}",
                 )
             except httpx.TimeoutException:
@@ -77,7 +82,11 @@ class SiteMonitor:
 class GhostWatcher:
     """Monitors ghosts.json for stale projects."""
 
-    def __init__(self, ghosts_path: Path = AGENT_DIR / "memory" / "ghosts.json", stale_hours: float = DEFAULT_STALE_HOURS):
+    def __init__(
+        self,
+        ghosts_path: Path = AGENT_DIR / "memory" / "ghosts.json",
+        stale_hours: float = DEFAULT_STALE_HOURS,
+    ):
         self.ghosts_path = ghosts_path
         self.stale_hours = stale_hours
 
@@ -100,10 +109,15 @@ class GhostWatcher:
                 last = datetime.fromisoformat(ts.replace("Z", "+00:00"))
                 hours = (now - last).total_seconds() / 3600
                 if hours > self.stale_hours:
-                    stale.append(GhostAlert(
-                        project=project, last_activity=ts, hours_stale=hours,
-                        mood=data.get("mood", ""), blocked_by=data.get("blocked_by"),
-                    ))
+                    stale.append(
+                        GhostAlert(
+                            project=project,
+                            last_activity=ts,
+                            hours_stale=hours,
+                            mood=data.get("mood", ""),
+                            blocked_by=data.get("blocked_by"),
+                        )
+                    )
             except (ValueError, TypeError):
                 continue
         return stale
@@ -112,7 +126,11 @@ class GhostWatcher:
 class MemorySyncer:
     """Monitors CORTEX memory files for staleness."""
 
-    def __init__(self, system_path: Path = AGENT_DIR / "memory" / "system.json", stale_hours: float = DEFAULT_MEMORY_STALE_HOURS):
+    def __init__(
+        self,
+        system_path: Path = AGENT_DIR / "memory" / "system.json",
+        stale_hours: float = DEFAULT_MEMORY_STALE_HOURS,
+    ):
         self.system_path = system_path
         self.stale_hours = stale_hours
 
@@ -182,14 +200,22 @@ class EngineHealthCheck:
         """Return alerts if CORTEX database is missing or unreadable."""
         alerts = []
         if not self.db_path.exists():
-            alerts.append(EngineHealthAlert(issue="database_missing", detail=f"{self.db_path} not found"))
+            alerts.append(
+                EngineHealthAlert(issue="database_missing", detail=f"{self.db_path} not found")
+            )
             return alerts
         if not os.access(self.db_path, os.R_OK):
-            alerts.append(EngineHealthAlert(issue="database_unreadable", detail=f"No read permission on {self.db_path}"))
+            alerts.append(
+                EngineHealthAlert(
+                    issue="database_unreadable", detail=f"No read permission on {self.db_path}"
+                )
+            )
         try:
             size = self.db_path.stat().st_size
             if size == 0:
-                alerts.append(EngineHealthAlert(issue="database_empty", detail="Database file is 0 bytes"))
+                alerts.append(
+                    EngineHealthAlert(issue="database_empty", detail="Database file is 0 bytes")
+                )
         except OSError as e:
             alerts.append(EngineHealthAlert(issue="database_stat_error", detail=str(e)))
         return alerts
@@ -216,5 +242,9 @@ class DiskMonitor:
             return []
         size_mb = total / (1024 * 1024)
         if size_mb > self.threshold_mb:
-            return [DiskAlert(path=str(self.watch_path), size_mb=size_mb, threshold_mb=self.threshold_mb)]
+            return [
+                DiskAlert(
+                    path=str(self.watch_path), size_mb=size_mb, threshold_mb=self.threshold_mb
+                )
+            ]
         return []

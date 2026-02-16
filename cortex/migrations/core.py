@@ -1,9 +1,9 @@
 """
 CORTEX v4.0 — Schema Migrations Core.
 """
+
 from __future__ import annotations
 
-import asyncio
 import logging
 import sqlite3
 
@@ -30,9 +30,7 @@ def ensure_migration_table(conn: sqlite3.Connection):
 def get_current_version(conn: sqlite3.Connection) -> int:
     """Get the current schema version (0 means fresh DB)."""
     try:
-        row = conn.execute(
-            "SELECT MAX(version) FROM schema_version"
-        ).fetchone()
+        row = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()
         return row[0] if row[0] is not None else 0
     except Exception:
         return 0
@@ -49,7 +47,7 @@ def run_migrations(conn: sqlite3.Connection) -> int:
     """
     ensure_migration_table(conn)
     current = get_current_version(conn)
-    
+
     # Apply base schema if database is fresh (version 0)
     if current == 0:
         logger.info("Fresh database detected. Applying base schema...")
@@ -59,12 +57,14 @@ def run_migrations(conn: sqlite3.Connection) -> int:
             except Exception as e:
                 msg = str(e).lower()
                 if "vec0" in str(stmt) or "no such module" in msg or "duplicate column" in msg:
-                    logger.warning("Skipping schema statement (likely missing vec0 or exists): %s", e)
+                    logger.warning(
+                        "Skipping schema statement (likely missing vec0 or exists): %s", e
+                    )
                 else:
                     raise
         conn.commit()
         logger.info("Base schema applied.")
-    
+
     applied = 0
 
     for version, description, func in MIGRATIONS:
@@ -73,9 +73,7 @@ def run_migrations(conn: sqlite3.Connection) -> int:
             try:
                 func(conn)
             except (sqlite3.Error, OSError) as e:
-                logger.error(
-                    "Migration %d failed: %s. Skipping.", version, e
-                )
+                logger.error("Migration %d failed: %s. Skipping.", version, e)
                 conn.rollback()
                 continue
             conn.execute(
@@ -86,8 +84,9 @@ def run_migrations(conn: sqlite3.Connection) -> int:
             applied += 1
 
     if applied:
-        logger.info("Applied %d migration(s). Schema now at version %d",
-                     applied, get_current_version(conn))
+        logger.info(
+            "Applied %d migration(s). Schema now at version %d", applied, get_current_version(conn)
+        )
     return applied
 
 

@@ -106,5 +106,3 @@ def time_travel_filter(
         f"{prefix}valid_until > (SELECT timestamp FROM transactions WHERE id = ?))",
         [tx_id, tx_id],
     )
-
-

@@ -219,8 +219,10 @@ class TestAuditLog:
         action = gate.request_approval(ActionLevel.L3_EXECUTE, "Test")
         gate.approve(action.action_id, action.hmac_challenge, "op")
         gate.execute_subprocess(
-            action.action_id, ["echo", "ok"],
-            capture_output=True, text=True,
+            action.action_id,
+            ["echo", "ok"],
+            capture_output=True,
+            text=True,
         )
         log = gate.get_audit_log()
         events = [e["event"] for e in log]

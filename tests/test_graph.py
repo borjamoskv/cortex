@@ -1,20 +1,12 @@
 """Tests for CORTEX Graph Memory."""
 
-import sqlite3
-import tempfile
-from pathlib import Path
-
 import pytest
 
 from cortex.engine import CortexEngine
 from cortex.graph import (
     detect_relationships,
     extract_entities,
-    get_graph,
-    process_fact_graph,
-    query_entity,
     SQLiteBackend,
-    Relationship,
 )
 
 
@@ -98,7 +90,9 @@ class TestGraphDBOperations:
 
     def test_upsert_entity_new(self, engine):
         conn = engine._get_sync_conn()
-        eid = SQLiteBackend(conn).upsert_entity_sync("SQLite", "tool", "cortex", "2025-01-01T00:00:00")
+        eid = SQLiteBackend(conn).upsert_entity_sync(
+            "SQLite", "tool", "cortex", "2025-01-01T00:00:00"
+        )
         assert eid > 0
         conn.commit()
 
@@ -116,12 +110,16 @@ class TestGraphDBOperations:
 
     def test_process_fact_graph(self, engine):
         from cortex.graph import process_fact_graph_sync
+
         conn = engine._get_sync_conn()
         # Insert a fact row so FK constraint is satisfied
         fact_id = engine.store_sync("cortex", "CORTEX uses SQLite and FastAPI for storage")
         ent_count, rel_count = process_fact_graph_sync(
-            conn, fact_id, "CORTEX uses SQLite and FastAPI for storage",
-            "cortex", "2025-01-01T00:00:00"
+            conn,
+            fact_id,
+            "CORTEX uses SQLite and FastAPI for storage",
+            "cortex",
+            "2025-01-01T00:00:00",
         )
         conn.commit()
         assert ent_count >= 2

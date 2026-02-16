@@ -21,7 +21,13 @@ def launchpad():
 @launchpad.command("launch")
 @click.argument("project")
 @click.argument("goal", required=False)
-@click.option("--file", "-f", "mission_file", type=click.Path(exists=True), help="YAML/JSON mission definition file")
+@click.option(
+    "--file",
+    "-f",
+    "mission_file",
+    type=click.Path(exists=True),
+    help="YAML/JSON mission definition file",
+)
 @click.option("--formation", default="IRON_DOME", help="Swarm formation")
 @click.option("--agents", "-a", default=10, help="Number of agents")
 @click.option("--db", default=DEFAULT_DB, help="Database path")
@@ -36,25 +42,34 @@ def mission_launch(project, goal, mission_file, formation, agents, db):
         display_goal = goal if goal else f"File: {os.path.basename(mission_file)}"
         with console.status(f"[bold blue]Launching mission in {project}: {display_goal}...[/]"):
             result = orchestrator.launch(
-                project=project, goal=goal, formation=formation,
-                agents=agents, mission_file=mission_file
+                project=project,
+                goal=goal,
+                formation=formation,
+                agents=agents,
+                mission_file=mission_file,
             )
         if result["status"] == "success":
-            console.print(Panel(
-                f"[bold green]✓ Mission Launched Successfully[/]\n"
-                f"Intent ID: [cyan]#{result['intent_id']}[/]\n"
-                f"Result ID: [cyan]#{result['result_id']}[/]\n"
-                f"Status: {result['status'].upper()}",
-                title="🐝 Mission Control", border_style="green",
-            ))
+            console.print(
+                Panel(
+                    f"[bold green]✓ Mission Launched Successfully[/]\n"
+                    f"Intent ID: [cyan]#{result['intent_id']}[/]\n"
+                    f"Result ID: [cyan]#{result['result_id']}[/]\n"
+                    f"Status: {result['status'].upper()}",
+                    title="🐝 Mission Control",
+                    border_style="green",
+                )
+            )
             console.print(f"\n[dim]Recent Output:[/]\n{result['stdout'][-500:]}")
         else:
-            console.print(Panel(
-                f"[bold red]✗ Mission Failed[/]\n"
-                f"Intent ID: {result.get('intent_id', 'N/A')}\n"
-                f"Error: {result.get('error', 'Check stderr')}",
-                title="🐝 Mission Control", border_style="red",
-            ))
+            console.print(
+                Panel(
+                    f"[bold red]✗ Mission Failed[/]\n"
+                    f"Intent ID: {result.get('intent_id', 'N/A')}\n"
+                    f"Error: {result.get('error', 'Check stderr')}",
+                    title="🐝 Mission Control",
+                    border_style="red",
+                )
+            )
             if "stderr" in result:
                 console.print(f"\n[red]Stderr:[/]\n{result['stderr']}")
     finally:
@@ -81,8 +96,11 @@ def mission_list(project, db):
         table.add_column("Created At", width=20)
         for m in missions:
             table.add_row(
-                str(m["id"]), m["project"], m["fact_type"],
-                m["content"][:50] + "...", m["created_at"]
+                str(m["id"]),
+                m["project"],
+                m["fact_type"],
+                m["content"][:50] + "...",
+                m["created_at"],
             )
         console.print(table)
     finally:

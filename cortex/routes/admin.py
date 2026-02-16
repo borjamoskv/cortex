@@ -18,6 +18,7 @@ from cortex.sync import export_to_json
 router = APIRouter(tags=["admin"])
 logger = logging.getLogger("uvicorn.error")
 
+
 @router.get("/v1/projects/{project}/export")
 async def export_project(
     project: str,
@@ -33,11 +34,14 @@ async def export_project(
             raise HTTPException(status_code=400, detail="Invalid characters in path")
 
         from pathlib import Path
+
         try:
             base_dir = Path.cwd().resolve()
             target_path = Path(path).resolve()
             if not str(target_path).startswith(str(base_dir)):
-                raise HTTPException(status_code=400, detail="Path must be relative and within the workspace")
+                raise HTTPException(
+                    status_code=400, detail="Path must be relative and within the workspace"
+                )
         except (ValueError, RuntimeError) as e:
             raise HTTPException(status_code=400, detail=f"Invalid path: {e}")
 
@@ -48,6 +52,7 @@ async def export_project(
     except Exception as e:
         logger.error("Export failed: %s", e)
         raise HTTPException(status_code=500, detail="Export failed")
+
 
 @router.get("/v1/status", response_model=StatusResponse)
 async def status(
@@ -70,6 +75,7 @@ async def status(
     except Exception as e:
         logger.error("Status unavailable: %s", e)
         raise HTTPException(status_code=500, detail="Status unavailable")
+
 
 @router.post("/v1/admin/keys")
 async def create_api_key(
@@ -104,6 +110,7 @@ async def create_api_key(
         "tenant_id": api_key.tenant_id,
         "message": "Save this key - it will NOT be shown again.",
     }
+
 
 @router.get("/v1/admin/keys")
 async def list_api_keys(auth: AuthResult = Depends(require_permission("admin"))) -> list[dict]:

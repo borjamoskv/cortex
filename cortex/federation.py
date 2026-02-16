@@ -6,6 +6,7 @@ A MetaCortex aggregates cross-shard search results via merge-sort on score.
 Default mode is 'single' (current behavior). Federation is opt-in via
 CORTEX_FEDERATION_MODE=federated.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -91,10 +92,7 @@ class FederatedEngine:
         if not shard_items:
             return []
 
-        tasks = [
-            engine.search(query, top_k=top_k, **kwargs)
-            for _, engine in shard_items
-        ]
+        tasks = [engine.search(query, top_k=top_k, **kwargs) for _, engine in shard_items]
         results_per_shard = await asyncio.gather(*tasks, return_exceptions=True)
 
         # Merge all results, sorted by score descending
@@ -146,6 +144,7 @@ class FederatedEngine:
         Only allows alphanumeric, hyphens, and underscores.
         """
         import re
+
         safe = re.sub(r"[^a-zA-Z0-9_-]", "_", tenant_id.strip())
         if not safe:
             raise ValueError(f"invalid tenant_id: {tenant_id!r}")
@@ -162,4 +161,5 @@ def get_engine(auto_embed: bool = True):
         return FederatedEngine(auto_embed=auto_embed)
     else:
         from cortex.engine import CortexEngine
+
         return CortexEngine(auto_embed=auto_embed)

@@ -73,21 +73,21 @@ class LocalEmbedder:
         """Generate embedding for a single text or delegate list to batch."""
         if isinstance(text, list):
             return self.embed_batch(text)
-            
+
         if not text or not str(text).strip():
             raise ValueError("text cannot be empty")
-            
+
         return self._embed_cached(str(text))
 
     def embed_batch(self, texts: list[str], batch_size: int = 32) -> list[list[float]]:
         """Generate embeddings for multiple texts."""
         if not texts:
             return []
-            
+
         for t in texts:
             if not t or not str(t).strip():
                 raise ValueError("embedded text cannot be empty")
-                
+
         self._ensure_model()
         embeddings = self._model.encode(
             texts,
@@ -128,7 +128,9 @@ class LocalEmbedder:
             chunk_num = i // chunk_size + 1
             logger.debug(
                 "Embedding chunk %d/%d (%d texts)",
-                chunk_num, total_chunks, len(chunk),
+                chunk_num,
+                total_chunks,
+                len(chunk),
             )
             chunk_embeddings = self.embed_batch(chunk, batch_size=batch_size)
             all_embeddings.extend(chunk_embeddings)

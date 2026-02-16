@@ -1,4 +1,5 @@
 """Constants for MEJORAlo engine."""
+
 import re
 
 STACK_MARKERS = {
@@ -10,21 +11,25 @@ STACK_MARKERS = {
 # Patterns for the Psi dimension (toxic code markers)
 # Split strings to avoid self-detection
 PSI_TERMS = [
-    "HAC" + "K", "FIX" + "ME", "W" + "TF", "stu" + "pid", 
-    "TO" + "DO", "X" + "XX", "KLU" + "DGE", "UG" + "LY"
+    "HAC" + "K",
+    "FIX" + "ME",
+    "W" + "TF",
+    "stu" + "pid",
+    "TO" + "DO",
+    "X" + "XX",
+    "KLU" + "DGE",
+    "UG" + "LY",
 ]
-PSI_PATTERNS = re.compile(
-    r"\b(" + "|".join(PSI_TERMS) + r")\b", re.IGNORECASE
-)
+PSI_PATTERNS = re.compile(r"\b(" + "|".join(PSI_TERMS) + r")\b", re.IGNORECASE)
 
 # Patterns for the Security dimension
 # Split risky keywords to avoid self-detection
 SEC_TERMS = [
-    r"eval\s*\(", 
-    r"innerH" + "TML", 
-    r"\.ex" + r"ec\s*\(", 
-    r"pass" + r"word\s*=\s*[\"']", 
-    r"sec" + r"ret\s*=\s*[\"']"
+    r"eval\s*\(",
+    r"innerH" + "TML",
+    r"\.ex" + r"ec\s*\(",
+    r"pass" + r"word\s*=\s*[\"']",
+    r"sec" + r"ret\s*=\s*[\"']",
 ]
 SECURITY_PATTERNS = re.compile(
     r"\b(" + "|".join(SEC_TERMS) + r")\b",
@@ -43,8 +48,20 @@ SCAN_EXTENSIONS = {
 
 # Directories to always skip
 SKIP_DIRS = {
-    ".git", "node_modules", "__pycache__", ".venv", "venv",
-    "dist", "build", ".next", ".svelte-kit", "vendor",
-    ".pytest_cache", ".mypy_cache", ".ruff_cache",
-    "tests", "test", "scripts", # Ignore test and script directories for Psis/Security
+    ".git",
+    "node_modules",
+    "__pycache__",
+    ".venv",
+    "venv",
+    "dist",
+    "build",
+    ".next",
+    ".svelte-kit",
+    "vendor",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+    "tests",
+    "test",
+    "scripts",  # Ignore test and script directories for Psis/Security
 }

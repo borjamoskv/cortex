@@ -51,8 +51,15 @@ def _export_csv(facts: list[Fact]) -> str:
 
     output = io.StringIO()
     fieldnames = [
-        "id", "project", "content", "fact_type", "tags",
-        "confidence", "valid_from", "valid_until", "source",
+        "id",
+        "project",
+        "content",
+        "fact_type",
+        "tags",
+        "confidence",
+        "valid_from",
+        "valid_until",
+        "source",
     ]
     writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction="ignore")
     writer.writeheader()

@@ -144,7 +144,9 @@ class AsyncCortexClient:
             params["limit"] = limit
             params["offset"] = offset
         results = await self._request(
-            "GET", f"/v1/projects/{project}/facts", params=params,
+            "GET",
+            f"/v1/projects/{project}/facts",
+            params=params,
         )
         return [
             Fact(
@@ -190,7 +192,8 @@ class AsyncCortexClient:
     ) -> str | list | dict:
         """Export project facts in specified format (json, csv, jsonl)."""
         result = await self._request(
-            "GET", f"/v1/projects/{project}/export",
+            "GET",
+            f"/v1/projects/{project}/export",
             params={"format": fmt},
         )
         return result
@@ -204,7 +207,8 @@ class AsyncCortexClient:
     async def create_key(self, name: str, tenant_id: str = "default") -> dict:
         """Create a new API key (admin only)."""
         return await self._request(
-            "POST", "/v1/admin/keys",
+            "POST",
+            "/v1/admin/keys",
             params={"name": name, "tenant_id": tenant_id},
         )
 

@@ -11,7 +11,6 @@ import json
 import logging
 import sqlite3
 from pathlib import Path
-from typing import Optional
 
 from cortex.engine import CortexEngine
 

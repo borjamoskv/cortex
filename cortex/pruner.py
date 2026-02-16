@@ -121,8 +121,7 @@ class EmbeddingPrunerMixin:
         """
         async with aiosqlite.connect(self.db_path) as conn:
             cursor = await conn.execute(
-                "SELECT fact_id, hash, pruned_at, reason "
-                "FROM pruned_embeddings WHERE fact_id = ?",
+                "SELECT fact_id, hash, pruned_at, reason FROM pruned_embeddings WHERE fact_id = ?",
                 (fact_id,),
             )
             row = await cursor.fetchone()
@@ -144,9 +143,7 @@ class EmbeddingPrunerMixin:
             active_count = (await active.fetchone())[0]
 
             try:
-                pruned = await conn.execute(
-                    "SELECT COUNT(*) FROM pruned_embeddings"
-                )
+                pruned = await conn.execute("SELECT COUNT(*) FROM pruned_embeddings")
                 pruned_count = (await pruned.fetchone())[0]
             except Exception:
                 pruned_count = 0

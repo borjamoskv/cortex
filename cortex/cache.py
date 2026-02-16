@@ -9,9 +9,9 @@ import logging
 import time
 from collections import OrderedDict
 from enum import Enum
-from typing import Generic, TypeVar, Optional, List, Any
+from typing import Generic, TypeVar, Optional, List
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 logger = logging.getLogger(__name__)
 
@@ -25,18 +25,13 @@ class CacheEvent(Enum):
 class TieredCache(Generic[T]):
     """
     Multi-tier cache with pub/sub invalidation.
-    
+
     Tiers:
     - L1: In-memory LRU (per-process)
     - L2/L3: (Future) Redis or Persistent Store
     """
 
-    def __init__(
-        self,
-        name: str,
-        l1_size: int = 1000,
-        ttl_seconds: float = 300.0
-    ):
+    def __init__(self, name: str, l1_size: int = 1000, ttl_seconds: float = 300.0):
         self.name = name
         self.l1: OrderedDict[str, tuple[float, T]] = OrderedDict()
         self.l1_size = l1_size
@@ -51,25 +46,25 @@ class TieredCache(Generic[T]):
             if time.monotonic() > expiry:
                 del self.l1[key]
                 return None
-            
+
             # Move to end (LRU)
             self.l1.move_to_end(key)
             return value
-        
+
         return None
 
     async def set(self, key: str, value: T, ttl: Optional[float] = None):
         """Set value in cache."""
         expiry = time.monotonic() + (ttl or self.ttl)
-        
+
         # L1 insert
         self.l1[key] = (expiry, value)
         self.l1.move_to_end(key)
-        
+
         # Evict oldest if over capacity
         while len(self.l1) > self.l1_size:
             self.l1.popitem(last=False)
-        
+
         # Notify subscribers
         await self._notify(CacheEvent.WARM, key)
 
@@ -79,7 +74,7 @@ class TieredCache(Generic[T]):
         keys_to_remove = [k for k in self.l1.keys() if pattern in k]
         for k in keys_to_remove:
             del self.l1[k]
-        
+
         await self._notify(CacheEvent.INVALIDATE, pattern)
 
     async def clear(self):

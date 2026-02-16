@@ -6,19 +6,20 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from cortex.api_deps import get_engine
+from cortex.api_deps import get_async_engine
 from cortex.auth import AuthResult, require_permission
-from cortex.engine import CortexEngine
+from cortex.engine_async import AsyncCortexEngine
 from cortex.models import AgentRegisterRequest, AgentResponse
 
 router = APIRouter(tags=["agents"])
 logger = logging.getLogger("uvicorn.error")
 
+
 @router.post("/v1/agents", response_model=AgentResponse)
 async def register_agent(
     req: AgentRegisterRequest,
     auth: AuthResult = Depends(require_permission("admin")),
-    engine: CortexEngine = Depends(get_engine),
+    engine: AsyncCortexEngine = Depends(get_async_engine),
 ) -> AgentResponse:
     """Register a new agent for Reputation-Weighted Consensus (Requires Admin)."""
     try:
@@ -29,21 +30,16 @@ async def register_agent(
             tenant_id=auth.tenant_id,
         )
 
-        conn = await engine.get_conn()
-        cursor = await conn.execute(
-            "SELECT id, name, agent_type, reputation_score, created_at FROM agents WHERE id = ?",
-            (agent_id,),
-        )
-        row = await cursor.fetchone()
-        if not row:
+        agent = await engine.get_agent(agent_id)
+        if not agent:
             raise HTTPException(status_code=500, detail="Failed to retrieve registered agent")
 
         return AgentResponse(
-            agent_id=row[0],
-            name=row[1],
-            agent_type=row[2],
-            reputation_score=row[3],
-            created_at=row[4],
+            agent_id=agent["id"],
+            name=agent["name"],
+            agent_type=agent["agent_type"],
+            reputation_score=agent["reputation_score"],
+            created_at=agent["created_at"],
         )
     except HTTPException:
         raise
@@ -56,45 +52,36 @@ async def register_agent(
 async def get_agent(
     agent_id: str,
     auth: AuthResult = Depends(require_permission("read")),
-    engine: CortexEngine = Depends(get_engine),
+    engine: AsyncCortexEngine = Depends(get_async_engine),
 ) -> AgentResponse:
     """Get agent details and current reputation."""
-    conn = await engine.get_conn()
-    cursor = await conn.execute(
-        "SELECT id, name, agent_type, reputation_score, created_at FROM agents WHERE id = ?",
-        (agent_id,),
-    )
-    row = await cursor.fetchone()
-    if not row:
+    agent = await engine.get_agent(agent_id)
+    if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
 
     return AgentResponse(
-        agent_id=row[0],
-        name=row[1],
-        agent_type=row[2],
-        reputation_score=row[3],
-        created_at=row[4],
+        agent_id=agent["id"],
+        name=agent["name"],
+        agent_type=agent["agent_type"],
+        reputation_score=agent["reputation_score"],
+        created_at=agent["created_at"],
     )
+
 
 @router.get("/v1/agents", response_model=list[AgentResponse])
 async def list_agents(
     auth: AuthResult = Depends(require_permission("read")),
-    engine: CortexEngine = Depends(get_engine),
+    engine: AsyncCortexEngine = Depends(get_async_engine),
 ) -> list[AgentResponse]:
     """List all agents for the current tenant."""
-    conn = await engine.get_conn()
-    cursor = await conn.execute(
-        "SELECT id, name, agent_type, reputation_score, created_at FROM agents WHERE tenant_id = ?",
-        (auth.tenant_id,),
-    )
-    rows = await cursor.fetchall()
+    agents = await engine.list_agents(auth.tenant_id)
     return [
         AgentResponse(
-            agent_id=r[0],
-            name=r[1],
-            agent_type=r[2],
-            reputation_score=r[3],
-            created_at=r[4],
+            agent_id=a["id"],
+            name=a["name"],
+            agent_type=a["agent_type"],
+            reputation_score=a["reputation_score"],
+            created_at=a["created_at"],
         )
-        for r in rows
+        for a in agents
     ]

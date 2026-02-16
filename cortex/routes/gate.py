@@ -18,7 +18,6 @@ from cortex.sovereign_gate import (
     GateError,
     GateExpired,
     GateInvalidSignature,
-    GateNotApproved,
     get_gate,
 )
 
@@ -27,7 +26,7 @@ router = APIRouter(prefix="/v1/gate", tags=["sovereign-gate"])
 
 @router.get("/status", response_model=GateStatusResponse)
 async def gate_status(
-    _ = Depends(require_permission("read")),
+    _=Depends(require_permission("read")),
 ):
     """Get the current SovereignGate status."""
     gate = get_gate()
@@ -36,21 +35,18 @@ async def gate_status(
 
 @router.get("/pending", response_model=List[GateActionResponse])
 async def list_pending(
-    _ = Depends(require_permission("read")),
+    _=Depends(require_permission("read")),
 ):
     """List all pending L3 actions awaiting approval."""
     gate = get_gate()
-    return [
-        GateActionResponse(**a.to_dict())
-        for a in gate.get_pending()
-    ]
+    return [GateActionResponse(**a.to_dict()) for a in gate.get_pending()]
 
 
 @router.post("/{action_id}/approve", response_model=GateActionResponse)
 async def approve_action(
     action_id: str,
     request: GateApprovalRequest,
-    _ = Depends(require_permission("write")),
+    _=Depends(require_permission("write")),
 ):
     """Approve a pending L3 action with HMAC signature."""
     gate = get_gate()
@@ -73,7 +69,7 @@ async def approve_action(
 @router.post("/{action_id}/deny")
 async def deny_action(
     action_id: str,
-    _ = Depends(require_permission("write")),
+    _=Depends(require_permission("write")),
 ):
     """Deny a pending L3 action."""
     gate = get_gate()
@@ -87,7 +83,7 @@ async def deny_action(
 @router.get("/audit")
 async def get_audit_log(
     limit: int = 50,
-    _ = Depends(require_permission("read")),
+    _=Depends(require_permission("read")),
 ):
     """View the SovereignGate audit log."""
     gate = get_gate()

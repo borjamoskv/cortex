@@ -4,7 +4,6 @@ CORTEX v4.0 — API Tests.
 Tests for the FastAPI REST API endpoints.
 """
 
-import os
 import tempfile
 
 import pytest
@@ -15,13 +14,12 @@ import cortex.api
 # Set test DB path
 _test_db = tempfile.mktemp(suffix=".db")
 
-# PATCH: Override the DB path in both config and api modules 
+# PATCH: Override the DB path in both config and api modules
 # to ensure the TestClient uses the temporary DB, not the user's real DB.
 cortex.config.DB_PATH = _test_db
 cortex.api.DB_PATH = _test_db
 
 from cortex.api import app
-from cortex.auth import AuthManager
 
 
 @pytest.fixture(scope="module")
@@ -58,33 +56,35 @@ class TestHealth:
 
 class TestAuth:
     def test_no_auth_rejected(self, client):
-        resp = client.post("/v1/facts", json={
-            "project": "test", "content": "hello"
-        })
+        resp = client.post("/v1/facts", json={"project": "test", "content": "hello"})
         assert resp.status_code == 401
 
     def test_bad_key_rejected(self, client):
-        resp = client.post("/v1/facts",
+        resp = client.post(
+            "/v1/facts",
             json={"project": "test", "content": "hello"},
-            headers={"Authorization": "Bearer ctx_invalid"})
+            headers={"Authorization": "Bearer ctx_invalid"},
+        )
         assert resp.status_code == 401
 
     def test_good_key_accepted(self, client, auth_headers):
-        resp = client.post("/v1/facts",
-            json={"project": "test", "content": "hello"},
-            headers=auth_headers)
+        resp = client.post(
+            "/v1/facts", json={"project": "test", "content": "hello"}, headers=auth_headers
+        )
         assert resp.status_code == 200
 
 
 class TestFacts:
     def test_store(self, client, auth_headers):
-        resp = client.post("/v1/facts",
+        resp = client.post(
+            "/v1/facts",
             json={
                 "project": "test",
                 "content": "CORTEX uses SQLite with vector search",
                 "tags": ["tech", "db"],
             },
-            headers=auth_headers)
+            headers=auth_headers,
+        )
         assert resp.status_code == 200
         assert resp.json()["fact_id"] > 0
         # The API stores under auth.tenant_id ("test"), not the JSON body's "project"
@@ -100,9 +100,9 @@ class TestFacts:
 
     def test_deprecate(self, client, auth_headers):
         # Store and deprecate
-        store_resp = client.post("/v1/facts",
-            json={"project": "demo", "content": "temporary fact"},
-            headers=auth_headers)
+        store_resp = client.post(
+            "/v1/facts", json={"project": "demo", "content": "temporary fact"}, headers=auth_headers
+        )
         fact_id = store_resp.json()["fact_id"]
 
         resp = client.delete(f"/v1/facts/{fact_id}", headers=auth_headers)
@@ -115,9 +115,9 @@ class TestFacts:
 
 class TestSearch:
     def test_search(self, client, auth_headers):
-        resp = client.post("/v1/search",
-            json={"query": "database technology", "k": 3},
-            headers=auth_headers)
+        resp = client.post(
+            "/v1/search", json={"query": "database technology", "k": 3}, headers=auth_headers
+        )
         assert resp.status_code == 200
         results = resp.json()
         assert isinstance(results, list)

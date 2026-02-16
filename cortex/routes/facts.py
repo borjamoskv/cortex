@@ -41,7 +41,7 @@ async def store_fact(
     return StoreResponse(
         fact_id=fact_id,
         project=auth.tenant_id,
-        message=f"Fact #{fact_id} stored in project '{auth.tenant_id}'"
+        message=f"Fact #{fact_id} stored in project '{auth.tenant_id}'",
     )
 
 
@@ -91,7 +91,7 @@ async def cast_vote(
         fact = await engine.get_fact(fact_id)
         if not fact:
             raise HTTPException(status_code=404, detail=f"Fact #{fact_id} not found")
-        
+
         if fact["project"] != auth.tenant_id:
             raise HTTPException(status_code=403, detail="Forbidden: Fact belongs to another tenant")
 
@@ -107,7 +107,7 @@ async def cast_vote(
             agent=agent_id,
             vote=req.value,
             new_consensus_score=score,
-            confidence=confidence
+            confidence=confidence,
         )
     except HTTPException:
         raise
@@ -130,7 +130,7 @@ async def cast_vote_v2(
         fact = await engine.get_fact(fact_id)
         if not fact:
             raise HTTPException(status_code=404, detail=f"Fact #{fact_id} not found")
-        
+
         if fact["project"] != auth.tenant_id:
             raise HTTPException(status_code=403, detail="Forbidden: Fact belongs to another tenant")
 
@@ -150,7 +150,7 @@ async def cast_vote_v2(
             agent=req.agent_id,
             vote=req.vote,
             new_consensus_score=score,
-            confidence=confidence
+            confidence=confidence,
         )
     except HTTPException:
         raise
@@ -171,7 +171,7 @@ async def get_votes(
     fact = await engine.get_fact(fact_id)
     if not fact:
         raise HTTPException(status_code=404, detail=f"Fact #{fact_id} not found")
-    
+
     if fact["project"] != auth.tenant_id:
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -199,7 +199,7 @@ async def deprecate_fact(
     fact = await engine.get_fact(fact_id)
     if not fact:
         raise HTTPException(status_code=404, detail=f"Fact #{fact_id} not found")
-    
+
     if fact["project"] != auth.tenant_id:
         raise HTTPException(status_code=403, detail="Forbidden")
 

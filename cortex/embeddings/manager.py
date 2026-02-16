@@ -1,4 +1,5 @@
 """Embedding Sovereign Layer — EmbeddingManager for CORTEX."""
+
 from __future__ import annotations
 
 import logging

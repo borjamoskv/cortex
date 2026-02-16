@@ -1,9 +1,6 @@
-# This file is part of CORTEX.
-# Licensed under the Business Source License 1.1 (BSL 1.1).
-# See top-level LICENSE file for details.
-# Change Date: 2030-01-01 (Transitions to Apache 2.0)
-
-"""SovereignGate core implementation."""
+"""
+CORTEX v4.0 — SovereignGate Core Logic.
+"""
 import hashlib
 import hmac
 import json
@@ -12,13 +9,14 @@ import os
 import subprocess
 import time
 import uuid
-from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
+from datetime import datetime, timezone
 
-from cortex.gate.exceptions import GateError, GateExpired, GateInvalidSignature, GateNotApproved
-from cortex.gate.models import ActionLevel, ActionStatus, GatePolicy, PendingAction
+from .models import ActionLevel, ActionStatus, GatePolicy, PendingAction
+from .exceptions import GateError, GateExpired, GateInvalidSignature, GateNotApproved
 
 logger = logging.getLogger("cortex.gate")
+_gate_instance: Optional['SovereignGate'] = None
 
 
 class SovereignGate:
@@ -28,6 +26,11 @@ class SovereignGate:
     Every action classified as L3_EXECUTE or L4_MUTATE must pass
     through this gate. The gate generates an HMAC-SHA256 challenge
     that the operator must sign before execution proceeds.
+
+    Modes:
+      - ENFORCE:    Block execution until operator signs (production)
+      - AUDIT_ONLY: Log the action but allow execution (development)
+      - DISABLED:   Transparent passthrough (testing)
     """
 
     DEFAULT_TIMEOUT = 300  # 5 minutes
@@ -41,10 +44,7 @@ class SovereignGate:
         # Resolve policy from env if not provided
         if policy is None:
             env = os.environ.get("CORTEX_ENV", "dev").lower()
-            policy = (
-                GatePolicy.ENFORCE if env == "prod"
-                else GatePolicy.AUDIT_ONLY
-            )
+            policy = GatePolicy.ENFORCE if env == "prod" else GatePolicy.AUDIT_ONLY
 
         self.policy = policy
         self.timeout = timeout
@@ -60,7 +60,8 @@ class SovereignGate:
 
         logger.info(
             "SovereignGate initialized — policy=%s timeout=%ds",
-            self.policy.value, int(self.timeout),
+            self.policy.value,
+            int(self.timeout),
         )
 
     # ─── Core API ─────────────────────────────────────────────────
@@ -73,20 +74,26 @@ class SovereignGate:
         project: Optional[str] = None,
         context: Optional[Dict[str, Any]] = None,
     ) -> PendingAction:
-        """Register an L3/L4 action and generate an HMAC challenge."""
+        """
+        Register an L3/L4 action and generate an HMAC challenge.
+
+        Returns a PendingAction with the challenge. The operator
+        must sign this challenge to approve execution.
+        """
         action_id = str(uuid.uuid4())[:12]
 
         # Generate HMAC challenge
-        payload = json.dumps({
-            "id": action_id,
-            "level": level.value,
-            "desc": description,
-            "ts": time.time(),
-        }, sort_keys=True)
+        payload = json.dumps(
+            {
+                "id": action_id,
+                "level": level.value,
+                "desc": description,
+                "ts": time.time(),
+            },
+            sort_keys=True,
+        )
 
-        challenge = hmac.new(
-            self._secret, payload.encode("utf-8"), hashlib.sha256
-        ).hexdigest()
+        challenge = hmac.new(self._secret, payload.encode("utf-8"), hashlib.sha256).hexdigest()
 
         action = PendingAction(
             action_id=action_id,
@@ -103,7 +110,9 @@ class SovereignGate:
 
         logger.info(
             "⚡ Gate: Action %s requested — %s [%s]",
-            action_id, description, level.value,
+            action_id,
+            description,
+            level.value,
         )
 
         return action
@@ -114,22 +123,23 @@ class SovereignGate:
         signature: str,
         operator_id: str = "operator",
     ) -> bool:
-        """Approve an action with HMAC signature verification."""
+        """
+        Approve an action with HMAC signature verification.
+
+        The signature must match the challenge generated during
+        request_approval.
+        """
         action = self._get_action(action_id)
 
         if action.is_expired(self.timeout):
             action.status = ActionStatus.EXPIRED
             self._log_audit("ACTION_EXPIRED", action)
-            raise GateExpired(
-                f"Action {action_id} expired after {self.timeout}s"
-            )
+            raise GateExpired(f"Action {action_id} expired after {self.timeout}s")
 
         # Verify HMAC signature
         if not hmac.compare_digest(signature, action.hmac_challenge):
             self._log_audit("INVALID_SIGNATURE", action)
-            raise GateInvalidSignature(
-                f"Invalid signature for action {action_id}"
-            )
+            raise GateInvalidSignature(f"Invalid signature for action {action_id}")
 
         action.status = ActionStatus.APPROVED
         action.approved_at = time.time()
@@ -137,12 +147,19 @@ class SovereignGate:
         self._log_audit("ACTION_APPROVED", action)
 
         logger.info(
-            "✅ Gate: Action %s approved by %s", action_id, operator_id,
+            "✅ Gate: Action %s approved by %s",
+            action_id,
+            operator_id,
         )
         return True
 
     def approve_interactive(self, action_id: str) -> bool:
-        """Interactive CLI approval — prompts the operator directly."""
+        """
+        Interactive CLI approval — prompts the operator directly.
+
+        In AUDIT_ONLY mode, auto-approves with a log entry.
+        In DISABLED mode, does nothing.
+        """
         action = self._get_action(action_id)
 
         if self.policy == GatePolicy.DISABLED:
@@ -152,7 +169,8 @@ class SovereignGate:
         if self.policy == GatePolicy.AUDIT_ONLY:
             logger.info(
                 "🔍 AUDIT: Action %s would require approval — %s",
-                action_id, action.description,
+                action_id,
+                action.description,
             )
             action.status = ActionStatus.APPROVED
             action.approved_at = time.time()
@@ -161,9 +179,9 @@ class SovereignGate:
             return True
 
         # ENFORCE mode — actual interactive prompt
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"⚡ SOVEREIGN GATE — L3 ACTION APPROVAL REQUIRED")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         print(f"  Action:  {action.description}")
         print(f"  Level:   {action.level.value}")
         print(f"  Project: {action.project or 'N/A'}")
@@ -173,7 +191,7 @@ class SovereignGate:
                 cmd_str = cmd_str[:100] + "..."
             print(f"  Command: {cmd_str}")
         print(f"  ID:      {action_id}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
         try:
             response = input("  ¿Aprobar ejecución? [s/N]: ").strip().lower()
@@ -191,9 +209,7 @@ class SovereignGate:
             action.status = ActionStatus.DENIED
             self._log_audit("ACTION_DENIED", action)
             logger.warning("❌ Gate: Action %s denied by operator", action_id)
-            raise GateNotApproved(
-                f"Action {action_id} denied by operator"
-            )
+            raise GateNotApproved(f"Action {action_id} denied by operator")
 
     def deny(self, action_id: str, reason: str = "") -> None:
         """Explicitly deny a pending action."""
@@ -209,13 +225,15 @@ class SovereignGate:
         cmd: List[str],
         **kwargs: Any,
     ) -> subprocess.CompletedProcess:
-        """Execute a subprocess ONLY if the action is approved."""
+        """
+        Execute a subprocess ONLY if the action is approved.
+
+        This is the single choke-point for all L3 subprocess calls.
+        """
         action = self._get_action(action_id)
 
         if action.status != ActionStatus.APPROVED:
-            raise GateNotApproved(
-                f"Action {action_id} is {action.status.value}, not approved"
-            )
+            raise GateNotApproved(f"Action {action_id} is {action.status.value}, not approved")
 
         if action.is_expired(self.timeout):
             action.status = ActionStatus.EXPIRED
@@ -229,19 +247,18 @@ class SovereignGate:
         action.executed_at = time.time()
         action.result = {
             "returncode": result.returncode,
-            "stdout_len": len(result.stdout or "") if result.stdout else 0,
-            "stderr_len": len(result.stderr or "") if result.stderr else 0,
+            "stdout_len": len(result.stdout or ""),
+            "stderr_len": len(result.stderr or ""),
         }
         self._log_audit("ACTION_EXECUTED", action)
         return result
 
+    # ─── Query API ────────────────────────────────────────────────
+
     def get_pending(self) -> List[PendingAction]:
         """Return all pending actions, expiring stale ones first."""
         self._sweep_expired()
-        return [
-            a for a in self._pending.values()
-            if a.status == ActionStatus.PENDING
-        ]
+        return [a for a in self._pending.values() if a.status == ActionStatus.PENDING]
 
     def get_audit_log(self, limit: int = 50) -> List[Dict[str, Any]]:
         """Return the most recent audit log entries."""
@@ -265,6 +282,8 @@ class SovereignGate:
             "total_audit_entries": len(self._audit_log),
         }
 
+    # ─── Internal ─────────────────────────────────────────────────
+
     def _get_action(self, action_id: str) -> PendingAction:
         """Retrieve an action by ID or raise."""
         action = self._pending.get(action_id)
@@ -273,14 +292,10 @@ class SovereignGate:
         return action
 
     def _sweep_expired(self) -> int:
-        """Mark expired pending actions."""
+        """Mark expired pending actions. Returns count of expired."""
         count = 0
-        now = time.time()
         for action in self._pending.values():
-            if (
-                action.status == ActionStatus.PENDING
-                and (now - action.created_at > self.timeout)
-            ):
+            if action.status == ActionStatus.PENDING and action.is_expired(self.timeout):
                 action.status = ActionStatus.EXPIRED
                 self._log_audit("ACTION_AUTO_EXPIRED", action)
                 count += 1
@@ -294,3 +309,25 @@ class SovereignGate:
             **action.to_dict(),
         }
         self._audit_log.append(entry)
+
+
+def get_gate(
+    policy: Optional[GatePolicy] = None,
+    secret: Optional[str] = None,
+    timeout: float = SovereignGate.DEFAULT_TIMEOUT,
+) -> SovereignGate:
+    """Get or create the global SovereignGate singleton."""
+    global _gate_instance
+    if _gate_instance is None:
+        _gate_instance = SovereignGate(
+            policy=policy,
+            secret=secret,
+            timeout=timeout,
+        )
+    return _gate_instance
+
+
+def reset_gate() -> None:
+    """Reset the global gate (for testing)."""
+    global _gate_instance
+    _gate_instance = None

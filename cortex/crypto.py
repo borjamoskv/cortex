@@ -2,6 +2,7 @@
 
 Implements L3 Application-Level Encryption using AES-GCM.
 """
+
 import base64
 import os
 from typing import Optional
@@ -11,14 +12,15 @@ try:
 except ImportError:
     AESGCM = None
 
+
 class Vault:
     """Secure Vault for storing sensitive facts."""
-    
+
     def __init__(self, key: Optional[bytes] = None):
         if not AESGCM:
             self._key = None
             return
-            
+
         if key:
             self._key = key
         else:
@@ -28,10 +30,10 @@ class Vault:
                 try:
                     self._key = base64.b64decode(env_key)
                 except Exception:
-                     # Fallback if invalid base64? No, invalid key is fatal.
-                    self._key = None # Or raise
+                    # Fallback if invalid base64? No, invalid key is fatal.
+                    self._key = None  # Or raise
             else:
-                # For dev/testing, generate one if none exists? 
+                # For dev/testing, generate one if none exists?
                 # Better: Allow no key (disabled encryption)
                 self._key = None
 
@@ -43,11 +45,11 @@ class Vault:
         """Encrypt string using AES-GCM."""
         if not self.is_available:
             raise RuntimeError("Encryption not available (missing key or library)")
-            
+
         aesgcm = AESGCM(self._key)
         nonce = os.urandom(12)
         ciphertext = aesgcm.encrypt(nonce, data.encode("utf-8"), None)
-        
+
         # Format: base64(nonce + ciphertext)
         return base64.b64encode(nonce + ciphertext).decode("utf-8")
 
@@ -55,12 +57,12 @@ class Vault:
         """Decrypt string using AES-GCM."""
         if not self.is_available:
             raise RuntimeError("Encryption not available (missing key or library)")
-            
+
         try:
             raw = base64.b64decode(encrypted_data)
             nonce = raw[:12]
             ciphertext = raw[12:]
-            
+
             aesgcm = AESGCM(self._key)
             plaintext = aesgcm.decrypt(nonce, ciphertext, None)
             return plaintext.decode("utf-8")

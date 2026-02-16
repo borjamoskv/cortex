@@ -14,11 +14,12 @@ from cortex.models import MissionLaunchRequest, MissionResponse
 
 router = APIRouter(prefix="/v1/missions", tags=["missions"])
 
+
 @router.post("/launch", response_model=MissionResponse)
 async def launch_mission(
     request: MissionLaunchRequest,
     engine: CortexEngine = Depends(get_engine),
-    _ = Depends(require_permission("write"))
+    _=Depends(require_permission("write")),
 ):
     """Launch a new swarm mission through the CORTEX Launchpad."""
     orchestrator = MissionOrchestrator(engine)
@@ -26,15 +27,16 @@ async def launch_mission(
         project=request.project,
         goal=request.goal,
         formation=request.formation,
-        agents=request.agents
+        agents=request.agents,
     )
     return result
+
 
 @router.get("/", response_model=List[dict])
 async def list_missions(
     project: Optional[str] = Query(None),
     engine: CortexEngine = Depends(get_engine),
-    _ = Depends(require_permission("read"))
+    _=Depends(require_permission("read")),
 ):
     """List recent mission intents and reports from the ledger."""
     orchestrator = MissionOrchestrator(engine)

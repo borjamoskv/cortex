@@ -79,15 +79,14 @@ class MoskvDaemon:
 
         cert_hostnames = [
             h.replace("https://", "").replace("http://", "").split("/")[0]
-            for h in resolved_sites if h.startswith("https://")
+            for h in resolved_sites
+            if h.startswith("https://")
         ]
         self.cert_monitor = CertMonitor(
             cert_hostnames,
             file_config.get("cert_warn_days", DEFAULT_CERT_WARN_DAYS),
         )
-        self.engine_health = EngineHealthCheck(
-            Path(file_config.get("db_path", str(CORTEX_DB)))
-        )
+        self.engine_health = EngineHealthCheck(Path(file_config.get("db_path", str(CORTEX_DB))))
         self.disk_monitor = DiskMonitor(
             Path(file_config.get("watch_path", str(CORTEX_DIR))),
             file_config.get("disk_warn_mb", DEFAULT_DISK_WARN_MB),
@@ -99,6 +98,7 @@ class MoskvDaemon:
         # Time Tracker (for flushing heartbeats)
         try:
             from cortex.timing import TimingTracker
+
             self.timing_conn = sqlite3.connect(file_config.get("db_path", str(CORTEX_DB)))
             self.tracker = TimingTracker(self.timing_conn)
         except (ImportError, sqlite3.Error) as e:
@@ -200,8 +200,11 @@ class MoskvDaemon:
         level = "✅" if status.all_healthy else "⚠️"
         logger.info(
             "%s Check complete in %.0fms: %d sites, %d stale ghosts, %d memory alerts",
-            level, status.check_duration_ms,
-            len(status.sites), len(status.stale_ghosts), len(status.memory_alerts),
+            level,
+            status.check_duration_ms,
+            len(status.sites),
+            len(status.stale_ghosts),
+            len(status.memory_alerts),
         )
         return status
 
@@ -210,6 +213,7 @@ class MoskvDaemon:
         try:
             from cortex.engine import CortexEngine
             from cortex.sync import export_snapshot, export_to_json, sync_memory
+
             engine = CortexEngine()
             engine.init_db()
             sync_result = sync_memory(engine)
@@ -217,7 +221,11 @@ class MoskvDaemon:
                 logger.info("Sync automático: %d hechos sincronizados", sync_result.total)
             wb_result = export_to_json(engine)
             if wb_result.had_changes:
-                logger.info("Write-back automático: %d archivos, %d items", wb_result.files_written, wb_result.items_exported)
+                logger.info(
+                    "Write-back automático: %d archivos, %d items",
+                    wb_result.files_written,
+                    wb_result.items_exported,
+                )
             export_snapshot(engine)
             engine.close()
         except (sqlite3.Error, OSError, ValueError) as e:
@@ -226,6 +234,7 @@ class MoskvDaemon:
 
     def run(self, interval: int = DEFAULT_INTERVAL) -> None:
         """Run checks in a loop until stopped."""
+
         def _handle_signal(signum: int, frame: object) -> None:
             sig_name = signal.Signals(signum).name
             logger.info("Received %s, shutting down gracefully...", sig_name)

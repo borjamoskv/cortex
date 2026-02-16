@@ -36,4 +36,3 @@ MIGRATIONS = [
     (13, "HA Cluster Nodes", _migration_013_cluster_nodes),
     (14, "Wave 5 Immutable Ledger Refinement", _migration_014_vote_ledger_refinement),
 ]
-

@@ -110,23 +110,17 @@ class TestHeartbeat:
 
     def test_heartbeat_auto_classifies(self, tracker):
         tracker.heartbeat("test", "main.swift")
-        row = tracker._conn.execute(
-            "SELECT category FROM heartbeats WHERE id=1"
-        ).fetchone()
+        row = tracker._conn.execute("SELECT category FROM heartbeats WHERE id=1").fetchone()
         assert row[0] == "coding"
 
     def test_heartbeat_custom_category(self, tracker):
         tracker.heartbeat("test", "meeting", category="comms")
-        row = tracker._conn.execute(
-            "SELECT category FROM heartbeats WHERE id=1"
-        ).fetchone()
+        row = tracker._conn.execute("SELECT category FROM heartbeats WHERE id=1").fetchone()
         assert row[0] == "comms"
 
     def test_heartbeat_with_branch(self, tracker):
         tracker.heartbeat("test", "file.py", branch="feature/timing")
-        row = tracker._conn.execute(
-            "SELECT branch FROM heartbeats WHERE id=1"
-        ).fetchone()
+        row = tracker._conn.execute("SELECT branch FROM heartbeats WHERE id=1").fetchone()
         assert row[0] == "feature/timing"
 
 
@@ -178,9 +172,7 @@ class TestFlush:
         tracker.heartbeat("proj", "b.py", timestamp=t2)
         tracker.flush()
 
-        row = tracker._conn.execute(
-            "SELECT duration_s FROM time_entries WHERE id=1"
-        ).fetchone()
+        row = tracker._conn.execute("SELECT duration_s FROM time_entries WHERE id=1").fetchone()
         assert row[0] == 180  # 3 minutes
 
     def test_flush_collects_entities(self, tracker):
@@ -192,9 +184,7 @@ class TestFlush:
         tracker.heartbeat("proj", "b.py", timestamp=t2)
         tracker.flush()
 
-        row = tracker._conn.execute(
-            "SELECT entities FROM time_entries WHERE id=1"
-        ).fetchone()
+        row = tracker._conn.execute("SELECT entities FROM time_entries WHERE id=1").fetchone()
         entities = json.loads(row[0])
         assert "a.py" in entities
         assert "b.py" in entities

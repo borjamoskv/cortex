@@ -12,6 +12,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 import matplotlib
+
 matplotlib.use("Agg")  # headless
 import matplotlib.pyplot as plt
 import networkx as nx
@@ -42,15 +43,14 @@ for name, q in tables.items():
 
 # ── 2. Extract ────────────────────────────────────────────────────────
 df_facts = pd.read_sql_query(
-    "SELECT * FROM facts WHERE valid_until IS NULL ORDER BY project, created_at DESC",
-    conn
+    "SELECT * FROM facts WHERE valid_until IS NULL ORDER BY project, created_at DESC", conn
 )
 df_agents = pd.read_sql_query("SELECT * FROM agents", conn)
-df_votes  = pd.read_sql_query("SELECT * FROM consensus_votes_v2", conn)
-df_tx     = pd.read_sql_query("SELECT * FROM transactions ORDER BY timestamp DESC LIMIT 500", conn)
+df_votes = pd.read_sql_query("SELECT * FROM consensus_votes_v2", conn)
+df_tx = pd.read_sql_query("SELECT * FROM transactions ORDER BY timestamp DESC LIMIT 500", conn)
 
 try:
-    df_entities  = pd.read_sql_query("SELECT * FROM entities", conn)
+    df_entities = pd.read_sql_query("SELECT * FROM entities", conn)
     df_relations = pd.read_sql_query("SELECT * FROM entity_relations", conn)
     print(f"  Entidades: {len(df_entities)}, Relaciones: {len(df_relations)}")
 except Exception:
@@ -87,23 +87,30 @@ for _, v in df_votes.iterrows():
         G.add_edge(src, tgt, style="dotted")
 
 color_map = {"project": "#FF6B6B", "fact": "#4D96FF", "agent": "#51CF66", "entity": "#FFA94D"}
-size_map  = {"project": 1400, "fact": 200, "agent": 600, "entity": 250}
+size_map = {"project": 1400, "fact": 200, "agent": 600, "entity": 250}
 
 colors = [color_map.get(G.nodes[n].get("ntype", "fact"), "#aaa") for n in G]
-sizes  = [size_map.get(G.nodes[n].get("ntype", "fact"), 300) for n in G]
+sizes = [size_map.get(G.nodes[n].get("ntype", "fact"), 300) for n in G]
 
 fig, ax = plt.subplots(figsize=(16, 11))
 pos = nx.spring_layout(G, k=0.4, iterations=60, seed=42)
-nx.draw(G, pos, node_color=colors, node_size=sizes,
-        with_labels=False, alpha=0.85, edge_color="#cccccc", ax=ax)
+nx.draw(
+    G,
+    pos,
+    node_color=colors,
+    node_size=sizes,
+    with_labels=False,
+    alpha=0.85,
+    edge_color="#cccccc",
+    ax=ax,
+)
 
-hub_labels = {n: G.nodes[n]["label"] for n in G
-              if G.nodes[n].get("ntype") in ("project", "agent")}
-nx.draw_networkx_labels(G, pos, labels=hub_labels, font_size=7,
-                        font_weight="bold", ax=ax)
+hub_labels = {n: G.nodes[n]["label"] for n in G if G.nodes[n].get("ntype") in ("project", "agent")}
+nx.draw_networkx_labels(G, pos, labels=hub_labels, font_size=7, font_weight="bold", ax=ax)
 
-ax.set_title("🕸️ CORTEX Knowledge Graph  (🔴 Proyectos · 🔵 Facts · 🟢 Agentes)",
-             fontsize=14, pad=15)
+ax.set_title(
+    "🕸️ CORTEX Knowledge Graph  (🔴 Proyectos · 🔵 Facts · 🟢 Agentes)", fontsize=14, pad=15
+)
 ax.axis("off")
 plt.tight_layout()
 plt.savefig("cortex_knowledge_graph.png", dpi=150, bbox_inches="tight")
@@ -153,10 +160,12 @@ doc.append(f"# 🧠 CORTEX MASTER KNOWLEDGE DIGEST\n")
 doc.append(f"> *Auto-generado: {ts}*\n\n")
 
 doc.append("## INTRODUCCIÓN Y CONTEXTO DEL SISTEMA\n")
-doc.append("CORTEX v4.0 es un motor de memoria soberano con capacidades de "
-           "Reputation-Weighted Consensus (RWC), embeddings vectoriales (sqlite-vec), "
-           "y ledger append-only hash-chained. Este documento contiene el vaciado "
-           "completo del conocimiento activo, organizado por proyecto.\n\n")
+doc.append(
+    "CORTEX v4.0 es un motor de memoria soberano con capacidades de "
+    "Reputation-Weighted Consensus (RWC), embeddings vectoriales (sqlite-vec), "
+    "y ledger append-only hash-chained. Este documento contiene el vaciado "
+    "completo del conocimiento activo, organizado por proyecto.\n\n"
+)
 
 doc.append("### Estadísticas Globales\n")
 doc.append(f"- **Facts activos:** {len(df_facts)}\n")
@@ -194,8 +203,10 @@ for proj in projects:
 
     unverified = proj_facts[proj_facts["confidence"] != "verified"]
     if len(unverified) > 0:
-        doc.append(f"> ⚠️ **Data Gap:** {len(unverified)} de {len(proj_facts)} "
-                   f"hechos en '{proj}' no están verificados.\n")
+        doc.append(
+            f"> ⚠️ **Data Gap:** {len(unverified)} de {len(proj_facts)} "
+            f"hechos en '{proj}' no están verificados.\n"
+        )
     doc.append("\n---\n\n")
 
 # ── Agents section ──
@@ -216,24 +227,33 @@ doc.append("\n")
 # ── Consensus ──
 if not df_votes.empty:
     doc.append("## 🗳️ CONSENSO — Hechos Más Votados\n\n")
-    vote_summary = df_votes.groupby("fact_id").agg(
-        total_votes=("vote", "count"),
-        avg_weight=("vote_weight", "mean"),
-    ).sort_values("total_votes", ascending=False).head(10)
+    vote_summary = (
+        df_votes.groupby("fact_id")
+        .agg(
+            total_votes=("vote", "count"),
+            avg_weight=("vote_weight", "mean"),
+        )
+        .sort_values("total_votes", ascending=False)
+        .head(10)
+    )
 
     for fid, row in vote_summary.iterrows():
         fact_content = df_facts[df_facts["id"] == fid]["content"]
         content = fact_content.iloc[0] if not fact_content.empty else f"Fact #{fid}"
-        doc.append(f"- **Fact #{fid}** ({int(row['total_votes'])} votos, "
-                   f"peso medio: {row['avg_weight']:.2f}): {content}\n")
+        doc.append(
+            f"- **Fact #{fid}** ({int(row['total_votes'])} votos, "
+            f"peso medio: {row['avg_weight']:.2f}): {content}\n"
+        )
     doc.append("\n")
 
 # ── Transactions ──
 if not df_tx.empty:
     doc.append("## 📒 ÚLTIMAS TRANSACCIONES (Ledger)\n\n")
     for _, t in df_tx.head(20).iterrows():
-        doc.append(f"- [{t.get('timestamp','')}] **{t['project']}** → "
-                   f"{t['action']}: {(t.get('detail','') or '')[:80]}\n")
+        doc.append(
+            f"- [{t.get('timestamp', '')}] **{t['project']}** → "
+            f"{t['action']}: {(t.get('detail', '') or '')[:80]}\n"
+        )
 
 content = "".join(doc)
 with open(MASTER_FILE, "w", encoding="utf-8") as f:

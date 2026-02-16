@@ -1,10 +1,11 @@
 """Sync System: Syncs system.json (knowledge/decisions) to CORTEX DB."""
+
 from __future__ import annotations
 
 import json
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from cortex.sync.common import SyncResult, calculate_fact_diff, get_existing_contents
 
@@ -47,7 +48,11 @@ def sync_system(engine: CortexEngine, path: Path, result: SyncResult) -> None:
 
     # decisions_global
     dec_candidates = data.get("decisions_global", [])
-    new_dec = calculate_fact_diff(existing, dec_candidates, lambda x: f"DECISION: {x.get('decision', str(x))} | RAZON: {x.get('reason', '')}")
+    new_dec = calculate_fact_diff(
+        existing,
+        dec_candidates,
+        lambda x: f"DECISION: {x.get('decision', str(x))} | RAZON: {x.get('reason', '')}",
+    )
     for content, dec in new_dec:
         try:
             engine.store(

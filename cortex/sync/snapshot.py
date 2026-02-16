@@ -1,4 +1,5 @@
 """Sync Engine: Snapshot Export."""
+
 from __future__ import annotations
 
 import json
@@ -43,12 +44,14 @@ async def export_snapshot(engine: CortexEngine, out_path: Path | None = None) ->
     by_project: dict[str, list] = {}
     for row in rows:
         project = row[0]
-        by_project.setdefault(project, []).append({
-            "content": row[1],
-            "type": row[2],
-            "tags": json.loads(row[3]) if row[3] else [],
-            "confidence": row[4],
-        })
+        by_project.setdefault(project, []).append(
+            {
+                "content": row[1],
+                "type": row[2],
+                "tags": json.loads(row[3]) if row[3] else [],
+                "confidence": row[4],
+            }
+        )
 
     lines = [
         "# 🧠 CORTEX — Snapshot de Memoria",
@@ -62,15 +65,17 @@ async def export_snapshot(engine: CortexEngine, out_path: Path | None = None) ->
     db_path = engine._db_path
     db_size_mb = db_path.stat().st_size / (1024 * 1024) if db_path.exists() else 0.0
 
-    lines.extend([
-        "## Estado del Sistema",
-        "",
-        f"- **DB:** {db_path} ({db_size_mb:.2f} MB)",
-        f"- **Facts activos:** {stats['active_facts']}",
-        f"- **Proyectos:** {', '.join(stats['projects'])}",
-        f"- **Tipos:** {', '.join(f'{t}: {c}' for t, c in stats['types'].items())}",
-        "",
-    ])
+    lines.extend(
+        [
+            "## Estado del Sistema",
+            "",
+            f"- **DB:** {db_path} ({db_size_mb:.2f} MB)",
+            f"- **Facts activos:** {stats['active_facts']}",
+            f"- **Proyectos:** {', '.join(stats['projects'])}",
+            f"- **Tipos:** {', '.join(f'{t}: {c}' for t, c in stats['types'].items())}",
+            "",
+        ]
+    )
 
     for project, facts in by_project.items():
         display_name = project.replace("__", "").upper() if project.startswith("__") else project

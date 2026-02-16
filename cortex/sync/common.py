@@ -1,11 +1,11 @@
 """Shared utilities and data structures for sync engine."""
+
 from __future__ import annotations
 
 import hashlib
 import json
 import logging
 import os
-import sqlite3
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -154,8 +154,7 @@ def db_content_hash(engine: CortexEngine, fact_type: str | None = None) -> str:
         ).fetchall()
     else:
         rows = conn.execute(
-            "SELECT id, content, meta, valid_from FROM facts "
-            "WHERE valid_until IS NULL ORDER BY id"
+            "SELECT id, content, meta, valid_from FROM facts WHERE valid_until IS NULL ORDER BY id"
         ).fetchall()
 
     # Serializar el contenido completo como un hash determinista
@@ -165,7 +164,9 @@ def db_content_hash(engine: CortexEngine, fact_type: str | None = None) -> str:
     return hasher.hexdigest()
 
 
-def calculate_fact_diff(existing: Set[str], candidates: list[dict], content_generator: Any) -> list[tuple[str, dict]]:
+def calculate_fact_diff(
+    existing: Set[str], candidates: list[dict], content_generator: Any
+) -> list[tuple[str, dict]]:
     """Calcula qué hechos son nuevos comparándolos con lo existente."""
     results = []
     for c in candidates:

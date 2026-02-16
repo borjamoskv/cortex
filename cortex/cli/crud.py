@@ -113,8 +113,12 @@ def edit(fact_id, new_content, db) -> None:
             tags = None
         engine.deprecate_sync(fact_id, "edited → new version")
         new_id = engine.store_sync(
-            project=project, content=new_content, fact_type=fact_type,
-            tags=tags, confidence=confidence, source=source or "edit-via-cli",
+            project=project,
+            content=new_content,
+            fact_type=fact_type,
+            tags=tags,
+            confidence=confidence,
+            source=source or "edit-via-cli",
         )
         wb = export_to_json(engine)
         console.print(

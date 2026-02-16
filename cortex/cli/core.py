@@ -26,12 +26,13 @@ def init(db) -> None:
     engine = get_engine(db)
     try:
         engine.init_db_sync()
-        console.print(Panel(
-            f"[bold green]✓ CORTEX v{__version__} initialized[/]\n"
-            f"Database: {engine._db_path}",
-            title="🧠 CORTEX",
-            border_style="green",
-        ))
+        console.print(
+            Panel(
+                f"[bold green]✓ CORTEX v{__version__} initialized[/]\nDatabase: {engine._db_path}",
+                title="🧠 CORTEX",
+                border_style="green",
+            )
+        )
     finally:
         _run_async(engine.close())
 
@@ -50,8 +51,12 @@ def store(project, content, fact_type, tags, confidence, source, db) -> None:
     try:
         tag_list = [t.strip() for t in tags.split(",")] if tags else None
         fact_id = engine.store_sync(
-            project=project, content=content, fact_type=fact_type,
-            tags=tag_list, confidence=confidence, source=source,
+            project=project,
+            content=content,
+            fact_type=fact_type,
+            tags=tag_list,
+            confidence=confidence,
+            source=source,
         )
         console.print(f"[green]✓[/] Stored fact [bold]#{fact_id}[/] in [cyan]{project}[/]")
     finally:
@@ -97,10 +102,13 @@ def recall(project, db) -> None:
         if not facts:
             console.print(f"[yellow]No facts found for project '{project}'[/]")
             return
-        console.print(Panel(
-            f"[bold]{project}[/] — {len(facts)} active facts",
-            title="🧠 CORTEX Recall", border_style="cyan",
-        ))
+        console.print(
+            Panel(
+                f"[bold]{project}[/] — {len(facts)} active facts",
+                title="🧠 CORTEX Recall",
+                border_style="cyan",
+            )
+        )
         by_type: dict[str, list] = {}
         for f in facts:
             by_type.setdefault(f.fact_type, []).append(f)
@@ -123,10 +131,13 @@ def history(project, as_of, db) -> None:
     try:
         facts = engine.history_sync(project, as_of=as_of)
         label = f"as of {as_of}" if as_of else "all time"
-        console.print(Panel(
-            f"[bold]{project}[/] — {len(facts)} facts ({label})",
-            title="⏰ CORTEX History", border_style="yellow",
-        ))
+        console.print(
+            Panel(
+                f"[bold]{project}[/] — {len(facts)} facts ({label})",
+                title="⏰ CORTEX History",
+                border_style="yellow",
+            )
+        )
         for f in facts:
             status = "[green]●[/]" if f.is_active() else "[red]○[/]"
             console.print(f"  {status} [dim]#{f.id}[/] [{f.valid_from[:10]}] {f.content[:80]}")
@@ -176,19 +187,23 @@ def status(db, json_output) -> None:
 def migrate(source, db) -> None:
     """Import CORTEX v3.1 data into v4.0."""
     from cortex.migrate import migrate_v31_to_v40
+
     engine = get_engine(db)
     engine.init_db()
     try:
         with console.status("[bold blue]Migrating v3.1 → v4.0...[/]"):
             stats = migrate_v31_to_v40(engine, source)
-        console.print(Panel(
-            f"[bold green]✓ Migration complete![/]\n"
-            f"Facts imported: {stats['facts_imported']}\n"
-            f"Errors imported: {stats['errors_imported']}\n"
-            f"Bridges imported: {stats['bridges_imported']}\n"
-            f"Sessions imported: {stats['sessions_imported']}",
-            title="🔄 v3.1 → v4.0 Migration", border_style="green",
-        ))
+        console.print(
+            Panel(
+                f"[bold green]✓ Migration complete![/]\n"
+                f"Facts imported: {stats['facts_imported']}\n"
+                f"Errors imported: {stats['errors_imported']}\n"
+                f"Bridges imported: {stats['bridges_imported']}\n"
+                f"Sessions imported: {stats['sessions_imported']}",
+                title="🔄 v3.1 → v4.0 Migration",
+                border_style="green",
+            )
+        )
     finally:
         _run_async(engine.close())
 
@@ -200,9 +215,12 @@ def migrate_graph(db) -> None:
     engine = get_engine(db)
     try:
         from cortex.graph import GRAPH_BACKEND, process_fact_graph
+
         if GRAPH_BACKEND != "neo4j":
             console.print("[yellow]WARNING: CORTEX_GRAPH_BACKEND is not set to 'neo4j'.[/]")
-            console.print("[dim]Migration will only re-process data into SQLite unless you set CORTEX_GRAPH_BACKEND=neo4j.[/]")
+            console.print(
+                "[dim]Migration will only re-process data into SQLite unless you set CORTEX_GRAPH_BACKEND=neo4j.[/]"
+            )
             if not click.confirm("Do you want to continue?", default=False):
                 return
         conn = engine._get_conn()
@@ -218,11 +236,13 @@ def migrate_graph(db) -> None:
                         prog_status.update(f"[bold blue]Processed {processed}/{len(facts)}...[/]")
                 except Exception as e:
                     console.print(f"[red]✗ Failed at fact #{fid}: {e}[/]")
-        console.print(Panel(
-            f"[bold green]✓ Graph Migration Complete![/]\n"
-            f"Facts processed: {processed}\nBackend: {GRAPH_BACKEND}",
-            title="🧠 Graph Migration", border_style="green",
-        ))
+        console.print(
+            Panel(
+                f"[bold green]✓ Graph Migration Complete![/]\n"
+                f"Facts processed: {processed}\nBackend: {GRAPH_BACKEND}",
+                title="🧠 Graph Migration",
+                border_style="green",
+            )
+        )
     finally:
         _run_async(engine.close())
-

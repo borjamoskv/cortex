@@ -1,0 +1,72 @@
+:root {
+  /* YInMn Blue & Industrial Noir Palette */
+  --color-primary: #2E5090;      /* YInMn Blue */
+  --color-primary-rgb: 46, 80, 144;
+  --color-primary-dark: #1A3A6E;
+  --color-primary-light: #4A7BC8;
+  
+  --color-accent: #FF5F1F;       /* Safety Orange / Neon */
+  --color-accent-rgb: 255, 95, 31;
+  
+  --color-bg: #050505;           /* Deep Obsidian */
+  --color-surface: #0E0E12;      /* Cold Steel */
+  --color-surface-lighter: #1A1A22;
+  
+  --color-text: #E0E0E5;         /* Fog Silver */
+  --color-text-muted: #6B7280;   /* Muted Lead */
+  
+  --color-border: rgba(46, 80, 144, 0.2);
+  --color-border-glow: rgba(46, 80, 144, 0.5);
+
+  /* Typography */
+  --font-display: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* Shadows & Glows */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.7);
+  --glow-primary: 0 0 15px rgba(46, 80, 144, 0.3);
+
+  /* Spacing */
+  --space-unit: 1rem;
+  --space-xs: calc(var(--space-unit) * 0.25);
+  --space-sm: calc(var(--space-unit) * 0.5);
+  --space-md: var(--space-unit);
+  --space-lg: calc(var(--space-unit) * 2);
+
+  /* Transitions */
+  --ease-out: cubic-bezier(0.2, 1, 0.3, 1);
+  --duration-fast: 150ms;
+  --duration-normal: 300ms;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-display);
+  line-height: 1.6;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-primary-dark);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary);
+}

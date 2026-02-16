@@ -2,11 +2,11 @@
 
 Core logic for the CORTEX MCP server.
 """
+
 import asyncio
 import json
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from functools import lru_cache
 from typing import Optional
 
 from cortex.engine import CortexEngine
@@ -24,6 +24,7 @@ logger = logging.getLogger("cortex.mcp.server")
 _MCP_AVAILABLE = False
 try:
     from mcp.server.fastmcp import FastMCP
+
     _MCP_AVAILABLE = True
 except ImportError:
     FastMCP = None  # type: ignore
@@ -93,8 +94,12 @@ def _register_store_tool(mcp: "FastMCP", ctx: _MCPContext) -> None:
             fact_id = await loop.run_in_executor(
                 ctx.executor,
                 engine.store,
-                project, content, fact_type, parsed_tags,
-                "stated", source or None,
+                project,
+                content,
+                fact_type,
+                parsed_tags,
+                "stated",
+                source or None,
             )
 
         ctx.metrics.record_request()
@@ -135,7 +140,9 @@ def _register_search_tool(mcp: "FastMCP", ctx: _MCPContext) -> None:
             results = await loop.run_in_executor(
                 ctx.executor,
                 engine.search,
-                query, project or None, min(max(top_k, 1), 20),
+                query,
+                project or None,
+                min(max(top_k, 1), 20),
             )
 
         if not results:
@@ -146,8 +153,7 @@ def _register_search_tool(mcp: "FastMCP", ctx: _MCPContext) -> None:
         lines = [f"Found {len(results)} results:\n"]
         for r in results:
             lines.append(
-                f"[#{r.fact_id}] (score: {r.score:.3f}) "
-                f"[{r.project}/{r.fact_type}]\n{r.content}\n"
+                f"[#{r.fact_id}] (score: {r.score:.3f}) [{r.project}/{r.fact_type}]\n{r.content}\n"
             )
 
         output = "\n".join(lines)
@@ -191,7 +197,8 @@ def _register_ledger_tool(mcp: "FastMCP", ctx: _MCPContext) -> None:
         async with ctx.pool.acquire() as conn:
             ledger = ImmutableLedger(conn)
             report = await asyncio.get_event_loop().run_in_executor(
-                ctx.executor, ledger.verify_integrity,
+                ctx.executor,
+                ledger.verify_integrity,
             )
 
         if report["valid"]:
@@ -216,9 +223,7 @@ def create_mcp_server(config: Optional[MCPServerConfig] = None) -> "FastMCP":
     function focused on orchestration (cognitive complexity ≤ 5).
     """
     if not _MCP_AVAILABLE:
-        raise ImportError(
-            "MCP SDK not installed. Install with: pip install 'cortex-memory[mcp]'"
-        )
+        raise ImportError("MCP SDK not installed. Install with: pip install 'cortex-memory[mcp]'")
 
     cfg = config or MCPServerConfig()
     mcp = FastMCP("CORTEX Memory v2")

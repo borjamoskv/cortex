@@ -30,16 +30,36 @@ async def engine():
 @pytest.fixture
 async def engine_with_data(engine):
     """Engine preloaded with test data."""
-    await engine.store("naroa-web", "Uses vanilla JS, no framework", fact_type="decision",
-                 tags=["js", "architecture"])
-    await engine.store("naroa-web", "Industrial Noir aesthetic with YInMn Blue",
-                 fact_type="decision", tags=["design", "aesthetic"])
-    await engine.store("naroa-web", "Gallery uses chromatic aberration on hover",
-                 fact_type="knowledge", tags=["gallery", "effects"])
-    await engine.store("live-notch", "Native SwiftUI app, not Electron",
-                 fact_type="decision", tags=["swift", "architecture"])
-    await engine.store("moskvbot", "Multi-channel bot using Kimi K2.5 API",
-                 fact_type="knowledge", tags=["bot", "api"])
+    await engine.store(
+        "naroa-web",
+        "Uses vanilla JS, no framework",
+        fact_type="decision",
+        tags=["js", "architecture"],
+    )
+    await engine.store(
+        "naroa-web",
+        "Industrial Noir aesthetic with YInMn Blue",
+        fact_type="decision",
+        tags=["design", "aesthetic"],
+    )
+    await engine.store(
+        "naroa-web",
+        "Gallery uses chromatic aberration on hover",
+        fact_type="knowledge",
+        tags=["gallery", "effects"],
+    )
+    await engine.store(
+        "live-notch",
+        "Native SwiftUI app, not Electron",
+        fact_type="decision",
+        tags=["swift", "architecture"],
+    )
+    await engine.store(
+        "moskvbot",
+        "Multi-channel bot using Kimi K2.5 API",
+        fact_type="knowledge",
+        tags=["bot", "api"],
+    )
     return engine
 
 
@@ -47,9 +67,7 @@ async def engine_with_data(engine):
 class TestInit:
     async def test_init_creates_tables(self, engine):
         conn = await engine.get_conn()
-        async with conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ) as cursor:
+        async with conn.execute("SELECT name FROM sqlite_master WHERE type='table'") as cursor:
             tables = await cursor.fetchall()
         table_names = {t[0] for t in tables}
         assert "facts" in table_names
@@ -103,9 +121,7 @@ class TestStore:
         await engine.store("test", "Fact 1")
         await engine.store("test", "Fact 2")
         conn = await engine.get_conn()
-        async with conn.execute(
-            "SELECT prev_hash, hash FROM transactions ORDER BY id"
-        ) as cursor:
+        async with conn.execute("SELECT prev_hash, hash FROM transactions ORDER BY id") as cursor:
             txs = await cursor.fetchall()
         assert txs[0][0] == "GENESIS"
         assert txs[1][0] == txs[0][1]  # Chain integrity

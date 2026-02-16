@@ -11,7 +11,6 @@ from typing import List, Optional
 
 import aiosqlite
 
-from cortex.ha.crdt import VectorClock
 
 logger = logging.getLogger(__name__)
 
@@ -23,11 +22,7 @@ class GossipProtocol:
     """
 
     def __init__(
-        self,
-        node_id: str,
-        conn: aiosqlite.Connection,
-        peers: List[str],
-        interval: float = 30.0
+        self, node_id: str, conn: aiosqlite.Connection, peers: List[str], interval: float = 30.0
     ):
         self.node_id = node_id
         self.conn = conn
@@ -58,19 +53,19 @@ class GossipProtocol:
                     await self._perform_gossip(peer)
             except Exception as e:
                 logger.error("Gossip error: %s", e)
-            
+
             await asyncio.sleep(self.interval)
 
     async def _perform_gossip(self, peer: str):
         """
         Perform gossip exchange with a peer.
-        
+
         1. Exchange Vector Clocks (to determine what's new)
         2. Compare Merkle Roots (to find data inconsistencies)
         3. Push/Pull missing data
         """
         # logger.debug(f"Gossiping with {peer}...")
-        
+
         # Stub: HTTP/RPC call to peer
         # peer_clock = await client.get_vector_clock(peer)
         # my_clock = ...

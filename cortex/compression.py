@@ -7,6 +7,7 @@ normalized embeddings from all-MiniLM-L6-v2.
 Storage format: [4 bytes float32 scale] + [384 bytes int8 values] = 388 bytes
 vs original: [384 × 4 bytes float32] = 1,536 bytes (JSON is even larger)
 """
+
 from __future__ import annotations
 
 import logging
@@ -17,6 +18,7 @@ logger = logging.getLogger("cortex.embeddings.compression")
 
 try:
     import numpy as np
+
     _NP_AVAILABLE = True
 except ImportError:
     _NP_AVAILABLE = False
@@ -42,9 +44,7 @@ def quantize_int8(embedding: List[float]) -> bytes:
     abs_max = max(abs(arr.max()), abs(arr.min()))
     scale = abs_max if abs_max > 0 else 1.0
 
-    quantized = np.clip(
-        np.round(arr / scale * 127), -128, 127
-    ).astype(np.int8)
+    quantized = np.clip(np.round(arr / scale * 127), -128, 127).astype(np.int8)
 
     return struct.pack("f", scale) + quantized.tobytes()
 

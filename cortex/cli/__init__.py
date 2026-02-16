@@ -28,14 +28,15 @@ def get_tracker(engine: CortexEngine) -> TimingTracker:
 
 # ─── Main Group ──────────────────────────────────────────────────
 
+
 @click.group()
 @click.version_option(__version__, prog_name="cortex")
 def cli() -> None:
-    """CORTEX — The Sovereign Ledger for AI Agents."""
+    """CORTEX — El Registro Soberano para Agentes de IA."""
     pass
 
 
-# ─── Register all sub-modules ───────────────────────────────────
+# ─── Registrar todos los sub-módulos ───────────────────────────────────
 from cortex.cli import (
     core,  # noqa: E402, F401
     crud,  # noqa: E402, F401
@@ -49,7 +50,7 @@ from cortex.cli import (
 from cortex.cli.launchpad_cmds import launchpad  # noqa: E402
 from cortex.cli.mejoralo_cmds import mejoralo  # noqa: E402
 
-# ─── Registration ────────────────────────────────────────────────
+# ─── Registro de comandos ───────────────────────────────────────────────
 from cortex.cli.time_cmds import heartbeat_cmd, time_cmd  # noqa: E402
 from cortex.cli.timeline_cmds import timeline  # noqa: E402
 from cortex.cli.vote_ledger import ledger  # noqa: E402
@@ -59,7 +60,7 @@ cli.add_command(heartbeat_cmd, name="heartbeat")
 cli.add_command(ledger)
 cli.add_command(timeline)
 cli.add_command(launchpad)
-cli.add_command(launchpad, name="mission")  # Alias for compatibility
+cli.add_command(launchpad, name="mission")  # Alias por compatibilidad
 cli.add_command(mejoralo)
 
 

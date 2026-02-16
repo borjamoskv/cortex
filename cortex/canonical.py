@@ -31,8 +31,11 @@ def canonical_json(obj: Any) -> str:
         Canonical JSON string.
     """
     return json.dumps(
-        obj, sort_keys=True, separators=(",", ":"),
-        ensure_ascii=True, default=str,
+        obj,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+        default=str,
     )
 
 
@@ -63,10 +66,7 @@ def compute_tx_hash(
     Returns:
         SHA-256 hex digest of the canonical input.
     """
-    h_input = (
-        f"{prev_hash}\x00{project}\x00{action}"
-        f"\x00{detail_json}\x00{timestamp}"
-    )
+    h_input = f"{prev_hash}\x00{project}\x00{action}\x00{detail_json}\x00{timestamp}"
     return hashlib.sha256(h_input.encode("utf-8")).hexdigest()
 
 

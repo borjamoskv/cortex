@@ -1,4 +1,5 @@
 """Utilities for MEJORAlo engine."""
+
 import subprocess
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -13,6 +14,7 @@ def detect_stack(path: str | Path) -> str:
         if (p / marker).exists():
             return stack
     return "unknown"
+
 
 def get_build_cmd(stack: str) -> Optional[list[str]]:
     cmds = {

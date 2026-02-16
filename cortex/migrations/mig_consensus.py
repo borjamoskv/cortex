@@ -6,9 +6,7 @@ logger = logging.getLogger("cortex")
 
 def _migration_007_consensus_layer(conn: sqlite3.Connection):
     """Implement Neural Swarm Consensus (votes + scores)."""
-    columns = {
-        row[1] for row in conn.execute("PRAGMA table_info(facts)").fetchall()
-    }
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(facts)").fetchall()}
     if "consensus_score" not in columns:
         conn.execute("ALTER TABLE facts ADD COLUMN consensus_score REAL DEFAULT 1.0")
         logger.info("Migration 007: Added 'consensus_score' column to facts")
@@ -30,9 +28,7 @@ def _migration_007_consensus_layer(conn: sqlite3.Connection):
 def _migration_008_consensus_refinement(conn: sqlite3.Connection):
     """Refine consensus layer: add index and ensure referential integrity."""
     # Index for preventing Sybil lookups and agent vote history
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_votes_agent ON consensus_votes(agent)"
-    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_votes_agent ON consensus_votes(agent)")
     logger.info("Migration 008: Added index on consensus_votes(agent)")
 
 

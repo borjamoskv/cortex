@@ -16,6 +16,7 @@ from cortex.models import HeartbeatRequest, TimeSummaryResponse
 router = APIRouter(tags=["timing"])
 logger = logging.getLogger("uvicorn.error")
 
+
 @router.post("/v1/heartbeat")
 async def record_heartbeat(
     req: HeartbeatRequest,
@@ -42,6 +43,7 @@ async def record_heartbeat(
         logger.error("Heartbeat failed: %s", e)
         raise HTTPException(status_code=500, detail="Heartbeat failed")
 
+
 @router.get("/v1/time/today", response_model=TimeSummaryResponse)
 async def time_today(
     project: Optional[str] = Query(None),
@@ -51,7 +53,9 @@ async def time_today(
     # Tenant Isolation
     if auth.tenant_id != "default":
         if project and project != auth.tenant_id:
-            raise HTTPException(status_code=403, detail="Forbidden: Access to this project is denied")
+            raise HTTPException(
+                status_code=403, detail="Forbidden: Access to this project is denied"
+            )
         project = auth.tenant_id
 
     try:
@@ -69,6 +73,7 @@ async def time_today(
         logger.error("Time summary failed: %s", e)
         raise HTTPException(status_code=500, detail="Time summary failed")
 
+
 @router.get("/v1/time", response_model=TimeSummaryResponse)
 async def time_report(
     project: Optional[str] = Query(None),
@@ -79,7 +84,9 @@ async def time_report(
     # Tenant Isolation
     if auth.tenant_id != "default":
         if project and project != auth.tenant_id:
-            raise HTTPException(status_code=403, detail="Forbidden: Access to this project is denied")
+            raise HTTPException(
+                status_code=403, detail="Forbidden: Access to this project is denied"
+            )
         project = auth.tenant_id
 
     try:
@@ -96,6 +103,7 @@ async def time_report(
     except sqlite3.Error as e:
         logger.error("Time report failed: %s", e)
         raise HTTPException(status_code=500, detail="Time report failed")
+
 
 @router.get("/v1/time/history")
 async def get_time_history(

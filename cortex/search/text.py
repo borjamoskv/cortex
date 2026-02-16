@@ -4,6 +4,7 @@
 # Change Date: 2030-01-01 (Transitions to Apache 2.0)
 
 """Full-text search implementation."""
+
 import logging
 import sqlite3
 from typing import Optional
@@ -63,7 +64,16 @@ async def _fts5_search(conn, query, project, fact_type, tags, limit, as_of):
         params.extend(t_params)
     else:
         sql += " AND f.valid_until IS NULL"
-    if project: sql += " AND f.project = ?"; params.append(project)
+    if project:
+        sql += " AND f.project = ?"
+        params.append(project)
+    if fact_type:
+        sql += " AND f.fact_type = ?"
+        params.append(fact_type)
+    if tags:
+        for tag in tags:
+            sql += " AND json_extract(f.tags, '$') LIKE ?"
+            params.append(f"%{tag}%")
     sql += " ORDER BY rank ASC LIMIT ?"
     params.append(limit)
     cursor = await conn.execute(sql, params)
@@ -85,7 +95,16 @@ async def _like_search(conn, query, project, fact_type, tags, limit, as_of):
         params.extend(t_params)
     else:
         sql += " AND f.valid_until IS NULL"
-    if project: sql += " AND f.project = ?"; params.append(project)
+    if project:
+        sql += " AND f.project = ?"
+        params.append(project)
+    if fact_type:
+        sql += " AND f.fact_type = ?"
+        params.append(fact_type)
+    if tags:
+        for tag in tags:
+            sql += " AND json_extract(f.tags, '$') LIKE ?"
+            params.append(f"%{tag}%")
     sql += " ORDER BY f.updated_at DESC LIMIT ?"
     params.append(limit)
     cursor = await conn.execute(sql, params)
@@ -110,16 +129,20 @@ def text_search_sync(
                 WHERE fts.content MATCH ? AND f.valid_until IS NULL
             """
             params: list = [fts_query]
-            if project: sql += " AND f.project = ?"; params.append(project)
+            if project:
+                sql += " AND f.project = ?"
+                params.append(project)
             sql += " ORDER BY rank ASC LIMIT ?"
             params.append(limit)
         else:
             sql = "SELECT id, content, project, fact_type, confidence, source, tags FROM facts WHERE content LIKE ? AND valid_until IS NULL"
             params = [f"%{query}%"]
-            if project: sql += " AND project = ?"; params.append(project)
+            if project:
+                sql += " AND project = ?"
+                params.append(project)
             sql += " LIMIT ?"
             params.append(limit)
-        
+
         cursor = conn.execute(sql, params)
         rows = cursor.fetchall()
     except Exception as e:

@@ -99,7 +99,7 @@ class TestTextSearch:
         fact_id = initial_results[0].fact_id
 
         await search_engine.deprecate(fact_id)
-        
+
         results = await text_search(conn, "Rust")
         fact_ids = {r.fact_id for r in results}
         assert fact_id not in fact_ids

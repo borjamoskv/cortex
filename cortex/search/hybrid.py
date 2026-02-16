@@ -4,6 +4,7 @@
 # Change Date: 2030-01-01 (Transitions to Apache 2.0)
 
 """Hybrid search with RRF."""
+
 import logging
 import sqlite3
 from typing import Optional
@@ -37,12 +38,17 @@ async def hybrid_search(
     result_map: dict[int, SearchResult] = {}
 
     for rank, res in enumerate(sem_results):
-        rrf_scores[res.fact_id] = rrf_scores.get(res.fact_id, 0.0) + vector_weight / (RRF_K + rank + 1)
+        rrf_scores[res.fact_id] = rrf_scores.get(res.fact_id, 0.0) + vector_weight / (
+            RRF_K + rank + 1
+        )
         result_map[res.fact_id] = res
 
     for rank, res in enumerate(txt_results):
-        rrf_scores[res.fact_id] = rrf_scores.get(res.fact_id, 0.0) + text_weight / (RRF_K + rank + 1)
-        if res.fact_id not in result_map: result_map[res.fact_id] = res
+        rrf_scores[res.fact_id] = rrf_scores.get(res.fact_id, 0.0) + text_weight / (
+            RRF_K + rank + 1
+        )
+        if res.fact_id not in result_map:
+            result_map[res.fact_id] = res
 
     sorted_ids = sorted(rrf_scores, key=rrf_scores.get, reverse=True)[:top_k]
     merged = []
@@ -70,12 +76,17 @@ def hybrid_search_sync(
     result_map: dict[int, SearchResult] = {}
 
     for rank, res in enumerate(sem_results):
-        rrf_scores[res.fact_id] = rrf_scores.get(res.fact_id, 0.0) + vector_weight / (RRF_K + rank + 1)
+        rrf_scores[res.fact_id] = rrf_scores.get(res.fact_id, 0.0) + vector_weight / (
+            RRF_K + rank + 1
+        )
         result_map[res.fact_id] = res
 
     for rank, res in enumerate(txt_results):
-        rrf_scores[res.fact_id] = rrf_scores.get(res.fact_id, 0.0) + text_weight / (RRF_K + rank + 1)
-        if res.fact_id not in result_map: result_map[res.fact_id] = res
+        rrf_scores[res.fact_id] = rrf_scores.get(res.fact_id, 0.0) + text_weight / (
+            RRF_K + rank + 1
+        )
+        if res.fact_id not in result_map:
+            result_map[res.fact_id] = res
 
     sorted_ids = sorted(rrf_scores, key=rrf_scores.get, reverse=True)[:top_k]
     merged = []

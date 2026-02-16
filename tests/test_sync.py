@@ -5,8 +5,6 @@ Tests for cortex.sync — forward sync, write-back, and export.
 from __future__ import annotations
 
 import json
-import tempfile
-from pathlib import Path
 
 import pytest
 
@@ -45,9 +43,7 @@ def agent_memory(tmp_path):
             "timestamp": "2026-01-01T00:00:00+00:00",
         }
     }
-    (memory_dir / "ghosts.json").write_text(
-        json.dumps(ghosts), encoding="utf-8"
-    )
+    (memory_dir / "ghosts.json").write_text(json.dumps(ghosts), encoding="utf-8")
 
     # system.json
     system = {
@@ -58,9 +54,7 @@ def agent_memory(tmp_path):
             {"id": "d1", "decision": "Use pytest for all tests"},
         ],
     }
-    (memory_dir / "system.json").write_text(
-        json.dumps(system), encoding="utf-8"
-    )
+    (memory_dir / "system.json").write_text(json.dumps(system), encoding="utf-8")
 
     # mistakes.jsonl
     mistake = {
@@ -69,9 +63,7 @@ def agent_memory(tmp_path):
         "cause": "Test cause",
         "fix": "Test fix applied",
     }
-    (memory_dir / "mistakes.jsonl").write_text(
-        json.dumps(mistake) + "\n", encoding="utf-8"
-    )
+    (memory_dir / "mistakes.jsonl").write_text(json.dumps(mistake) + "\n", encoding="utf-8")
 
     # bridges.jsonl
     bridge = {
@@ -80,9 +72,7 @@ def agent_memory(tmp_path):
         "pattern": "test-pattern",
         "note": "Test bridge note",
     }
-    (memory_dir / "bridges.jsonl").write_text(
-        json.dumps(bridge) + "\n", encoding="utf-8"
-    )
+    (memory_dir / "bridges.jsonl").write_text(json.dumps(bridge) + "\n", encoding="utf-8")
 
     return memory_dir
 
@@ -128,9 +118,7 @@ class TestSyncMemory:
         empty_dir = tmp_path / "empty_memory"
         empty_dir.mkdir(parents=True)
         monkeypatch.setattr("cortex.sync.read.MEMORY_DIR", empty_dir)
-        monkeypatch.setattr(
-            "cortex.sync.common.SYNC_STATE_FILE", tmp_path / "sync_state.json"
-        )
+        monkeypatch.setattr("cortex.sync.common.SYNC_STATE_FILE", tmp_path / "sync_state.json")
 
         result = sync_memory(engine)
         assert result.total == 0
@@ -154,9 +142,7 @@ class TestWriteBack:
     def test_writeback_creates_files(self, engine, tmp_path, monkeypatch):
         """Write-back should create JSON files from DB facts."""
         monkeypatch.setattr("cortex.sync.write.MEMORY_DIR", tmp_path / "memory")
-        monkeypatch.setattr(
-             "cortex.sync.common.SYNC_STATE_FILE", tmp_path / "sync_state.json"
-        )
+        monkeypatch.setattr("cortex.sync.common.SYNC_STATE_FILE", tmp_path / "sync_state.json")
 
         # Store test facts
         engine.store("test", "Test ghost content", fact_type="ghost")
@@ -173,9 +159,7 @@ class TestWriteBack:
     def test_writeback_sha_skip(self, engine, tmp_path, monkeypatch):
         """Second write-back with no changes should skip files."""
         monkeypatch.setattr("cortex.sync.write.MEMORY_DIR", tmp_path / "memory")
-        monkeypatch.setattr(
-            "cortex.sync.common.SYNC_STATE_FILE", tmp_path / "sync_state.json"
-        )
+        monkeypatch.setattr("cortex.sync.common.SYNC_STATE_FILE", tmp_path / "sync_state.json")
 
         engine.store("test", "Some content", fact_type="knowledge")
 

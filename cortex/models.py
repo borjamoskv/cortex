@@ -11,7 +11,9 @@ from pydantic import BaseModel, Field, field_validator
 class StoreRequest(BaseModel):
     project: str = Field(..., max_length=100, description="Project/namespace for the fact")
     content: str = Field(..., max_length=50000, description="The fact content")
-    fact_type: str = Field("knowledge", max_length=20, description="Type: knowledge, decision, mistake, bridge, ghost")
+    fact_type: str = Field(
+        "knowledge", max_length=20, description="Type: knowledge, decision, mistake, bridge, ghost"
+    )
     tags: list[str] = Field(default_factory=list, description="Optional tags")
     metadata: dict | None = Field(None, description="Optional JSON metadata")
 
@@ -36,7 +38,7 @@ class SearchRequest(BaseModel):
     as_of: Optional[str] = Field(None, description="Temporal filter (ISO 8601)")
     fact_type: Optional[str] = Field(None, description="Filter by fact type")
     tags: Optional[List[str]] = Field(None, description="Filter by tags")
-    
+
     @field_validator("query")
     @classmethod
     def not_empty(cls, v: str) -> str:
@@ -151,6 +153,7 @@ class TimeSummaryResponse(BaseModel):
 
 # ─── Mission Models ──────────────────────────────────────────────────
 
+
 class MissionLaunchRequest(BaseModel):
     project: str = Field(..., max_length=100)
     goal: str = Field(..., max_length=2000)
@@ -169,8 +172,10 @@ class MissionResponse(BaseModel):
 class LedgerReportResponse(BaseModel):
     valid: bool
     violations: List[Dict[str, Any]]
-    tx_checked: int
-    roots_checked: int
+    tx_checked: int = 0
+    roots_checked: int = 0
+    votes_checked: int = 0
+    vote_checkpoints_checked: int = 0
 
 
 class CheckpointResponse(BaseModel):
@@ -180,6 +185,7 @@ class CheckpointResponse(BaseModel):
 
 
 # ─── MEJORAlo Models ────────────────────────────────────────────────
+
 
 class MejoraloScanRequest(BaseModel):
     project: str = Field(..., max_length=100)
@@ -239,6 +245,7 @@ class MejoraloShipResponse(BaseModel):
 
 
 # ─── SovereignGate Models ────────────────────────────────────────────
+
 
 class GateApprovalRequest(BaseModel):
     signature: str = Field(..., description="HMAC-SHA256 signature of the challenge")

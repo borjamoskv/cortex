@@ -2,6 +2,7 @@
 
 Configuration, Metrics, Caching, and Connection Pooling.
 """
+
 import asyncio
 import logging
 import os
@@ -14,9 +15,11 @@ from typing import Any, AsyncIterator, Dict, Optional
 
 logger = logging.getLogger("cortex.mcp.utils")
 
+
 @dataclass
 class MCPServerConfig:
     """Configuration for MCP server."""
+
     db_path: str = "~/.cortex/cortex.db"
     max_workers: int = 4
     query_cache_size: int = 1000
@@ -28,6 +31,7 @@ class MCPServerConfig:
 
 class MCPMetrics:
     """Runtime metrics for the MCP server."""
+
     def __init__(self):
         self.requests_total = 0
         self.cache_hits = 0
@@ -50,12 +54,13 @@ class MCPMetrics:
             "requests_total": self.requests_total,
             "cache_hit_rate": self.cache_hits / max(1, (self.cache_hits + self.cache_misses)),
             "errors_total": self.errors_total,
-            "uptime_since": self.start_at
+            "uptime_since": self.start_at,
         }
 
 
 class SimpleAsyncCache:
     """A minimal TTL-aware cache for semantic search results."""
+
     def __init__(self, maxsize: int = 100, ttl_seconds: int = 300):
         self.maxsize = maxsize
         self.ttl = ttl_seconds
@@ -83,6 +88,7 @@ class SimpleAsyncCache:
 
 class AsyncConnectionPool:
     """Async-aware SQLite connection pool with health checks and timeouts."""
+
     def __init__(self, db_path: str, max_connections: int = 5, acquire_timeout: float = 5.0):
         self.db_path = os.path.expanduser(db_path)
         self.max_connections = max_connections
@@ -96,15 +102,11 @@ class AsyncConnectionPool:
         async with self._lock:
             if self._initialized:
                 return True
-            
+
             logger.debug("Initializing connection pool for %s", self.db_path)
             try:
                 for _ in range(self.max_connections):
-                    conn = sqlite3.connect(
-                        self.db_path,
-                        check_same_thread=False,
-                        timeout=30.0
-                    )
+                    conn = sqlite3.connect(self.db_path, check_same_thread=False, timeout=30.0)
                     conn.execute("PRAGMA journal_mode=WAL")
                     conn.execute("PRAGMA synchronous=NORMAL")
                     # Quick health check
@@ -136,7 +138,7 @@ class AsyncConnectionPool:
                 logger.warning("Reviving stale database connection")
                 conn = sqlite3.connect(self.db_path, check_same_thread=False, timeout=30.0)
                 conn.execute("PRAGMA journal_mode=WAL")
-            
+
             yield conn
         finally:
             if conn:

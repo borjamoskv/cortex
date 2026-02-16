@@ -2,6 +2,7 @@
 
 Exposes the main sync functions and result types.
 """
+
 from cortex.sync.common import (
     AGENT_DIR,
     CORTEX_DIR,

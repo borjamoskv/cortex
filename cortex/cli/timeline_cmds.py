@@ -16,18 +16,20 @@ def timeline():
     """Navigate the CORTEX timeline and manage snapshots."""
     pass
 
+
 @timeline.command("log")
 @click.option("--limit", "-n", default=20, help="Number of transactions")
 @click.option("--db", default=DEFAULT_DB, help="Database path")
 def timeline_log(limit, db):
     """Show the transaction history ledger."""
+
     async def _timeline_log_async():
         engine = get_engine(db)
         try:
             conn = await engine.get_conn()
             cursor = await conn.execute(
                 "SELECT id, project, action, hash, timestamp FROM transactions ORDER BY id DESC LIMIT ?",
-                (limit,)
+                (limit,),
             )
             rows = await cursor.fetchall()
             if not rows:
@@ -44,8 +46,9 @@ def timeline_log(limit, db):
             console.print(table)
         finally:
             await engine.close()
-            
+
     asyncio.run(_timeline_log_async())
+
 
 @timeline.command("checkout")
 @click.argument("tx_id", type=int)
@@ -53,6 +56,7 @@ def timeline_log(limit, db):
 @click.option("--db", default=DEFAULT_DB, help="Database path")
 def timeline_checkout(tx_id, project, db):
     """Reconstruct state at a specific transaction ID."""
+
     async def _timeline_checkout_async():
         engine = get_engine(db)
         try:
@@ -72,29 +76,34 @@ def timeline_checkout(tx_id, project, db):
             table.add_column("Score", style="green", width=6)
             for f in facts:
                 table.add_row(
-                    str(f.id), f.project, f.fact_type,
+                    str(f.id),
+                    f.project,
+                    f.fact_type,
                     f.content[:50] + "..." if len(f.content) > 50 else f.content,
-                    f"{f.consensus_score:.2f}"
+                    f"{f.consensus_score:.2f}",
                 )
             console.print(table)
         finally:
             await engine.close()
-            
+
     asyncio.run(_timeline_checkout_async())
+
 
 @timeline.group("snapshot")
 def timeline_snapshot():
     """Manage physical database snapshots."""
     pass
 
+
 @timeline_snapshot.command("create")
 @click.argument("name")
 @click.option("--db", default=DEFAULT_DB, help="Database path")
 def snapshot_create(name, db):
     """Create a new physical snapshot."""
+
     async def _snapshot_create_async():
-        from cortex.engine.ledger import ImmutableLedger
         from cortex.engine.snapshots import SnapshotManager
+
         engine = get_engine(db)
         try:
             conn = await engine.get_conn()
@@ -102,11 +111,13 @@ def snapshot_create(name, db):
             cursor = await conn.execute("SELECT id FROM transactions ORDER BY id DESC LIMIT 1")
             latest_tx = await cursor.fetchone()
             tx_id = latest_tx[0] if latest_tx else 0
-            
-            cursor = await conn.execute("SELECT root_hash FROM merkle_roots ORDER BY id DESC LIMIT 1")
+
+            cursor = await conn.execute(
+                "SELECT root_hash FROM merkle_roots ORDER BY id DESC LIMIT 1"
+            )
             root_row = await cursor.fetchone()
             merkle_root = root_row[0] if root_row else "0xGENESIS"
-            
+
             sm = SnapshotManager(db_path=db)
             with console.status("[bold blue]Creating physical snapshot...[/]"):
                 snap = await sm.create_snapshot(name, tx_id, merkle_root)
@@ -116,15 +127,18 @@ def snapshot_create(name, db):
             console.print(f"  [dim]Size:[/] {snap.size_mb} MB")
         finally:
             await engine.close()
-            
+
     asyncio.run(_snapshot_create_async())
+
 
 @timeline_snapshot.command("list")
 @click.option("--db", default=DEFAULT_DB, help="Database path")
 def snapshot_list(db):
     """List all available snapshots."""
+
     async def _snapshot_list_async():
         from cortex.engine.snapshots import SnapshotManager
+
         sm = SnapshotManager(db_path=db)
         snaps = await sm.list_snapshots()
         if not snaps:
@@ -137,9 +151,8 @@ def snapshot_list(db):
         table.add_column("Size", width=10)
         for s in snaps:
             table.add_row(
-                s.name, str(s.tx_id),
-                s.created_at[:19].replace("T", " "), f"{s.size_mb} MB"
+                s.name, str(s.tx_id), s.created_at[:19].replace("T", " "), f"{s.size_mb} MB"
             )
         console.print(table)
-        
+
     asyncio.run(_snapshot_list_async())

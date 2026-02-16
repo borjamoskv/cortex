@@ -1,4 +1,5 @@
-""" CORTEX Engine — Fact Model and helpers. """
+"""CORTEX Engine — Fact Model and helpers."""
+
 from __future__ import annotations
 
 import json

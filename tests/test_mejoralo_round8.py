@@ -7,9 +7,7 @@ Tests for:
 3. API endpoint error handling (status, time, graph)
 """
 
-import sqlite3
 from collections import deque
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -90,12 +88,14 @@ class TestAsyncClientExport:
     def test_export_signature_uses_fmt(self):
         from cortex.async_client import AsyncCortexClient
         import inspect
+
         sig = inspect.signature(AsyncCortexClient.export)
         assert "fmt" in sig.parameters
         assert "format" not in sig.parameters
 
     def test_async_client_all_exports(self):
         from cortex.async_client import __all__
+
         assert "AsyncCortexClient" in __all__
 
 
@@ -109,11 +109,13 @@ class TestApiStatusErrorHandling:
     def client(self):
         from cortex.api import app
         from fastapi.testclient import TestClient
+
         return TestClient(app)
 
     def test_status_endpoint_handles_db_error(self, client):
         from cortex.routes.admin import status
         import inspect
+
         source = inspect.getsource(status)
         assert "sqlite3.Error" in source
         assert "Status unavailable" in source
@@ -125,6 +127,7 @@ class TestApiExportFmtParameter:
     def test_export_endpoint_no_format_shadow(self):
         from cortex.routes.admin import export_project
         import inspect
+
         source = inspect.getsource(export_project)
         # Should use fmt variable, not format
         assert "fmt ==" in source or "fmt:" in source
@@ -133,6 +136,7 @@ class TestApiExportFmtParameter:
         """The query param should still be called 'format' for API compat."""
         from cortex.routes.admin import export_project
         import inspect
+
         source = inspect.getsource(export_project)
         assert 'alias="format"' in source
 
@@ -143,6 +147,7 @@ class TestApiTimeErrorHandling:
     def test_heartbeat_has_error_handling(self):
         from cortex.routes.timing import record_heartbeat
         import inspect
+
         source = inspect.getsource(record_heartbeat)
         assert "sqlite3.Error" in source
         assert "Heartbeat failed" in source
@@ -150,18 +155,21 @@ class TestApiTimeErrorHandling:
     def test_time_today_has_error_handling(self):
         from cortex.routes.timing import time_today
         import inspect
+
         source = inspect.getsource(time_today)
         assert "sqlite3.Error" in source
 
     def test_time_report_has_error_handling(self):
         from cortex.routes.timing import time_report
         import inspect
+
         source = inspect.getsource(time_report)
         assert "sqlite3.Error" in source
 
     def test_time_history_has_error_handling(self):
         from cortex.routes.timing import get_time_history
         import inspect
+
         source = inspect.getsource(get_time_history)
         assert "sqlite3.Error" in source
 
@@ -172,6 +180,7 @@ class TestApiGraphErrorHandling:
     def test_graph_project_has_error_handling(self):
         from cortex.routes.graph import get_graph
         import inspect
+
         source = inspect.getsource(get_graph)
         assert "sqlite3.Error" in source
         assert "Graph unavailable" in source
@@ -179,5 +188,6 @@ class TestApiGraphErrorHandling:
     def test_graph_all_has_error_handling(self):
         from cortex.routes.graph import get_graph_all
         import inspect
+
         source = inspect.getsource(get_graph_all)
         assert "sqlite3.Error" in source

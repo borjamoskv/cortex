@@ -4,15 +4,16 @@
 # Change Date: 2030-01-01 (Transitions to Apache 2.0)
 
 """SQLite Graph Backend."""
+
 import logging
-import sqlite3
-from typing import Any, Dict, List, Optional, Union
+from typing import Optional
 
 import aiosqlite
 
 from .base import GraphBackend
 
 logger = logging.getLogger("cortex.graph.backends")
+
 
 class SQLiteBackend(GraphBackend):
     def __init__(self, conn):
@@ -23,7 +24,7 @@ class SQLiteBackend(GraphBackend):
     async def upsert_entity(self, name: str, entity_type: str, project: str, timestamp: str) -> int:
         query_select = "SELECT id, mention_count FROM entities WHERE name = ? AND project = ?"
         params = (name, project)
-        
+
         if self._is_async:
             async with self.conn.execute(query_select, params) as cursor:
                 row = await cursor.fetchone()
@@ -71,10 +72,12 @@ class SQLiteBackend(GraphBackend):
             )
             return cursor.lastrowid
 
-    async def upsert_relationship(self, source_id: int, target_id: int, relation_type: str, fact_id: int, timestamp: str) -> int:
+    async def upsert_relationship(
+        self, source_id: int, target_id: int, relation_type: str, fact_id: int, timestamp: str
+    ) -> int:
         query_select = "SELECT id, weight FROM entity_relations WHERE source_entity_id = ? AND target_entity_id = ?"
         params = (source_id, target_id)
-        
+
         if self._is_async:
             async with self.conn.execute(query_select, params) as cursor:
                 row = await cursor.fetchone()
@@ -101,7 +104,9 @@ class SQLiteBackend(GraphBackend):
                 cursor = self.conn.execute(query_insert, params_insert)
                 return cursor.lastrowid
 
-    def upsert_relationship_sync(self, source_id: int, target_id: int, relation_type: str, fact_id: int, timestamp: str) -> int:
+    def upsert_relationship_sync(
+        self, source_id: int, target_id: int, relation_type: str, fact_id: int, timestamp: str
+    ) -> int:
         cursor = self.conn.execute(
             "SELECT id, weight FROM entity_relations WHERE source_entity_id = ? AND target_entity_id = ?",
             (source_id, target_id),
@@ -142,13 +147,17 @@ class SQLiteBackend(GraphBackend):
         entities = []
         entity_ids = []
         for row in entity_rows:
-            entities.append({
-                "id": row[0], "name": row[1], "type": row[2], "project": row[3], "weight": row[4]
-            })
+            entities.append(
+                {"id": row[0], "name": row[1], "type": row[2], "project": row[3], "weight": row[4]}
+            )
             entity_ids.append(row[0])
 
         if not entity_ids:
-            return {"entities": [], "relationships": [], "stats": {"total_entities": 0, "total_relationships": 0}}
+            return {
+                "entities": [],
+                "relationships": [],
+                "stats": {"total_entities": 0, "total_relationships": 0},
+            }
 
         placeholders = ",".join(["?"] * len(entity_ids))
         query_rels = f"""
@@ -157,7 +166,7 @@ class SQLiteBackend(GraphBackend):
             WHERE source_entity_id IN ({placeholders}) OR target_entity_id IN ({placeholders})
         """
         params_rels = entity_ids + entity_ids
-        
+
         if self._is_async:
             async with self.conn.execute(query_rels, params_rels) as cursor:
                 rel_rows = await cursor.fetchall()
@@ -166,9 +175,9 @@ class SQLiteBackend(GraphBackend):
 
         relationships = []
         for row in rel_rows:
-            relationships.append({
-                "id": row[0], "source": row[1], "target": row[2], "type": row[3], "weight": row[4]
-            })
+            relationships.append(
+                {"id": row[0], "source": row[1], "target": row[2], "type": row[3], "weight": row[4]}
+            )
 
         # Calculate stats
         total_entities = 0
@@ -201,10 +210,7 @@ class SQLiteBackend(GraphBackend):
         return {
             "entities": entities,
             "relationships": relationships,
-            "stats": {
-                "total_entities": total_entities,
-                "total_relationships": total_rels
-            }
+            "stats": {"total_entities": total_entities, "total_relationships": total_rels},
         }
 
     def get_graph_sync(self, project: Optional[str] = None, limit: int = 50) -> dict:
@@ -212,40 +218,50 @@ class SQLiteBackend(GraphBackend):
             entity_rows = self.conn.execute(
                 "SELECT id, name, entity_type, project, mention_count "
                 "FROM entities WHERE project = ? ORDER BY mention_count DESC LIMIT ?",
-                (project, limit)
+                (project, limit),
             ).fetchall()
         else:
             entity_rows = self.conn.execute(
                 "SELECT id, name, entity_type, project, mention_count "
                 "FROM entities ORDER BY mention_count DESC LIMIT ?",
-                (limit,)
+                (limit,),
             ).fetchall()
 
         entities = []
         entity_ids = []
         for row in entity_rows:
-            entities.append({"id": row[0], "name": row[1], "type": row[2], "project": row[3], "weight": row[4]})
+            entities.append(
+                {"id": row[0], "name": row[1], "type": row[2], "project": row[3], "weight": row[4]}
+            )
             entity_ids.append(row[0])
 
         if not entity_ids:
-            return {"entities": [], "relationships": [], "stats": {"total_entities": 0, "total_relationships": 0}}
+            return {
+                "entities": [],
+                "relationships": [],
+                "stats": {"total_entities": 0, "total_relationships": 0},
+            }
 
         placeholders = ",".join(["?"] * len(entity_ids))
         rel_rows = self.conn.execute(
             f"SELECT id, source_entity_id, target_entity_id, relation_type, weight "
             f"FROM entity_relations WHERE source_entity_id IN ({placeholders}) OR target_entity_id IN ({placeholders})",
-            entity_ids + entity_ids
+            entity_ids + entity_ids,
         ).fetchall()
 
         relationships = []
         for row in rel_rows:
-            relationships.append({"id": row[0], "source": row[1], "target": row[2], "type": row[3], "weight": row[4]})
+            relationships.append(
+                {"id": row[0], "source": row[1], "target": row[2], "type": row[3], "weight": row[4]}
+            )
 
         if project:
-            total_entities = self.conn.execute("SELECT COUNT(*) FROM entities WHERE project = ?", (project,)).fetchone()[0]
+            total_entities = self.conn.execute(
+                "SELECT COUNT(*) FROM entities WHERE project = ?", (project,)
+            ).fetchone()[0]
             total_rels = self.conn.execute(
-                "SELECT COUNT(*) FROM entity_relations er JOIN entities e ON er.source_entity_id = e.id WHERE e.project = ?", 
-                (project,)
+                "SELECT COUNT(*) FROM entity_relations er JOIN entities e ON er.source_entity_id = e.id WHERE e.project = ?",
+                (project,),
             ).fetchone()[0]
         else:
             total_entities = self.conn.execute("SELECT COUNT(*) FROM entities").fetchone()[0]
@@ -254,12 +270,13 @@ class SQLiteBackend(GraphBackend):
         return {
             "entities": entities,
             "relationships": relationships,
-            "stats": {"total_entities": total_entities, "total_relationships": total_rels}
+            "stats": {"total_entities": total_entities, "total_relationships": total_rels},
         }
 
     async def query_entity(self, name: str, project: Optional[str] = None) -> Optional[dict]:
-        if not name or not name.strip(): return None
-        
+        if not name or not name.strip():
+            return None
+
         q_ent = "SELECT id, name, entity_type, project, mention_count FROM entities WHERE name = ?"
         params_ent = [name]
         if project:
@@ -274,42 +291,61 @@ class SQLiteBackend(GraphBackend):
         else:
             row = self.conn.execute(q_ent, params_ent).fetchone()
 
-        if not row: return None
+        if not row:
+            return None
 
-        entity = {"id": row[0], "name": row[1], "type": row[2], "project": row[3], "mentions": row[4]}
-        
+        entity = {
+            "id": row[0],
+            "name": row[1],
+            "type": row[2],
+            "project": row[3],
+            "mentions": row[4],
+        }
+
         q_conn = """SELECT e.name, e.entity_type, er.relation_type, er.weight 
                    FROM entity_relations er 
                    JOIN entities e ON (CASE WHEN er.source_entity_id = ? THEN er.target_entity_id ELSE er.source_entity_id END = e.id)
                    WHERE er.source_entity_id = ? OR er.target_entity_id = ?
                    ORDER BY er.weight DESC LIMIT 20"""
-        
+
         if self._is_async:
             async with self.conn.execute(q_conn, (row[0], row[0], row[0])) as cursor:
                 connections = await cursor.fetchall()
         else:
             connections = self.conn.execute(q_conn, (row[0], row[0], row[0])).fetchall()
 
-        entity["connections"] = [{"name": c[0], "type": c[1], "relation": c[2], "weight": c[3]} for c in connections]
+        entity["connections"] = [
+            {"name": c[0], "type": c[1], "relation": c[2], "weight": c[3]} for c in connections
+        ]
         return entity
 
     def query_entity_sync(self, name: str, project: Optional[str] = None) -> Optional[dict]:
-        if not name or not name.strip(): return None
+        if not name or not name.strip():
+            return None
         q = "SELECT id, name, entity_type, project, mention_count FROM entities WHERE name = ?"
         if project:
             row = self.conn.execute(q + " AND project = ?", (name, project)).fetchone()
         else:
             row = self.conn.execute(q + " ORDER BY mention_count DESC LIMIT 1", (name,)).fetchone()
-        
-        if not row: return None
-        entity = {"id": row[0], "name": row[1], "type": row[2], "project": row[3], "mentions": row[4]}
+
+        if not row:
+            return None
+        entity = {
+            "id": row[0],
+            "name": row[1],
+            "type": row[2],
+            "project": row[3],
+            "mentions": row[4],
+        }
         connections = self.conn.execute(
             """SELECT e.name, e.entity_type, er.relation_type, er.weight FROM entity_relations er 
                JOIN entities e ON (CASE WHEN er.source_entity_id = ? THEN er.target_entity_id ELSE er.source_entity_id END = e.id)
                WHERE er.source_entity_id = ? OR er.target_entity_id = ? ORDER BY er.weight DESC LIMIT 20""",
-            (row[0], row[0], row[0])
+            (row[0], row[0], row[0]),
         ).fetchall()
-        entity["connections"] = [{"name": c[0], "type": c[1], "relation": c[2], "weight": c[3]} for c in connections]
+        entity["connections"] = [
+            {"name": c[0], "type": c[1], "relation": c[2], "weight": c[3]} for c in connections
+        ]
         return entity
 
     async def find_path(self, source: str, target: str, max_depth: int = 3) -> list[dict]:
@@ -319,9 +355,12 @@ class SQLiteBackend(GraphBackend):
             async with self.conn.execute(q_ids, (source, target)) as cursor:
                 id_map = {row[1]: row[0] for row in await cursor.fetchall()}
         else:
-            id_map = {row[1]: row[0] for row in self.conn.execute(q_ids, (source, target)).fetchall()}
+            id_map = {
+                row[1]: row[0] for row in self.conn.execute(q_ids, (source, target)).fetchall()
+            }
 
-        if source not in id_map or target not in id_map: return []
+        if source not in id_map or target not in id_map:
+            return []
 
         start_id = id_map[source]
         end_id = id_map[target]
@@ -330,7 +369,8 @@ class SQLiteBackend(GraphBackend):
 
         while queue:
             curr_id, path = queue.pop(0)
-            if len(path) >= max_depth: continue
+            if len(path) >= max_depth:
+                continue
 
             q_neighbors = """SELECT e.id, e.name, er.relation_type, er.weight FROM entity_relations er
                              JOIN entities e ON (CASE WHEN er.source_entity_id = ? THEN er.target_entity_id ELSE er.source_entity_id END = e.id)
@@ -342,20 +382,29 @@ class SQLiteBackend(GraphBackend):
                 neighbors = self.conn.execute(q_neighbors, (curr_id, curr_id, curr_id)).fetchall()
 
             for nid, nname, rtype, weight in neighbors:
-                new_step = {"source": source if curr_id == start_id else "intermediate", "target": nname, "type": rtype, "weight": weight}
-                if nid == end_id: return path + [new_step]
+                new_step = {
+                    "source": source if curr_id == start_id else "intermediate",
+                    "target": nname,
+                    "type": rtype,
+                    "weight": weight,
+                }
+                if nid == end_id:
+                    return path + [new_step]
                 if nid not in visited:
                     visited.add(nid)
                     queue.append((nid, path + [new_step]))
         return []
 
-    async def find_context_subgraph(self, seed_entities: list[str], depth: int = 2, max_nodes: int = 50) -> dict:
+    async def find_context_subgraph(
+        self, seed_entities: list[str], depth: int = 2, max_nodes: int = 50
+    ) -> dict:
         """Retrieve a subgraph around seed entities."""
-        if not seed_entities: return {"nodes": [], "edges": []}
+        if not seed_entities:
+            return {"nodes": [], "edges": []}
         nodes = {}
         edges = []
         visited_ids = set()
-        
+
         placeholders = ",".join(["?"] * len(seed_entities))
         q_init = f"SELECT id, name, entity_type FROM entities WHERE name IN ({placeholders})"
         if self._is_async:
@@ -372,7 +421,8 @@ class SQLiteBackend(GraphBackend):
             visited_ids.add(eid)
 
         for _ in range(depth):
-            if not current_layer_ids or len(nodes) >= max_nodes: break
+            if not current_layer_ids or len(nodes) >= max_nodes:
+                break
             phs = ",".join(["?"] * len(current_layer_ids))
             q_expand = f"""SELECT e1.name, e1.entity_type, e1.id, e2.name, e2.entity_type, e2.id, er.relation_type, er.weight
                           FROM entity_relations er
@@ -399,9 +449,11 @@ class SQLiteBackend(GraphBackend):
                         next_layer_ids.append(t_id)
                         visited_ids.add(t_id)
                 edge = {"source": s_name, "target": t_name, "type": r_type, "weight": weight}
-                if edge not in edges: edges.append(edge)
+                if edge not in edges:
+                    edges.append(edge)
             current_layer_ids = next_layer_ids
-            if len(nodes) >= max_nodes: break
+            if len(nodes) >= max_nodes:
+                break
         return {"nodes": [{"name": k, **v} for k, v in nodes.items()], "edges": edges}
 
     async def upsert_ghost(self, reference: str, context: str, project: str, timestamp: str) -> int:
@@ -411,7 +463,8 @@ class SQLiteBackend(GraphBackend):
                 row = await cursor.fetchone()
         else:
             row = self.conn.execute(q_sel, (reference, project)).fetchone()
-        if row: return row[0]
+        if row:
+            return row[0]
         q_ins = "INSERT INTO ghosts (reference, context, project, detected_at, status) VALUES (?, ?, ?, ?, 'open')"
         if self._is_async:
             async with self.conn.execute(q_ins, (reference, context, project, timestamp)) as cursor:
@@ -419,7 +472,9 @@ class SQLiteBackend(GraphBackend):
         else:
             return self.conn.execute(q_ins, (reference, context, project, timestamp)).lastrowid
 
-    async def resolve_ghost(self, ghost_id: int, target_id: int, confidence: float, timestamp: str) -> bool:
+    async def resolve_ghost(
+        self, ghost_id: int, target_id: int, confidence: float, timestamp: str
+    ) -> bool:
         q = "UPDATE ghosts SET status = 'resolved', resolved_at = ?, target_id = ?, confidence = ? WHERE id = ?"
         if self._is_async:
             async with self.conn.execute(q, (timestamp, target_id, confidence, ghost_id)) as cursor:

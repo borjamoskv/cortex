@@ -179,6 +179,7 @@ async def cast_vote_v2(
 
 
 @router.get("/v1/facts/{fact_id}/votes", response_model=List[dict])
+async def get_votes(
     fact_id: int,
     auth: AuthResult = Depends(require_permission("read")),
     engine: CortexEngine = Depends(get_engine),

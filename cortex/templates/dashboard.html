@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CORTEX — Sovereign Ledger</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@300;400;600;700&display=swap');
+
+  /* ─── RESET & VARS ──────────────── */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #050505;
+    --surface: #0a0a0a;
+    --surface-2: #111111;
+    --border: #222;
+    --text: #e0e0e0;
+    --text-dim: #666;
+    --primary: #00ff9d;      /* Signal Green */
+    --primary-dim: rgba(0, 255, 157, 0.1);
+    --secondary: #6366f1;    /* Indigo */
+    --accent: #f59e0b;       /* Amber */
+    --danger: #ef4444;       /* Red */
+    --font-mono: 'JetBrains Mono', monospace;
+    --font-sans: 'Inter', sans-serif;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+  }
+
+  /* ─── HEADER ────────────────────── */
+  .header {
+    padding: 20px 40px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(5, 5, 5, 0.8);
+    backdrop-filter: blur(12px);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo {
+    font-family: var(--font-mono);
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .logo span { color: var(--primary); }
+
+  .status-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-radius: 100px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    font-size: 12px;
+    font-family: var(--font-mono);
+    color: var(--text-dim);
+    transition: all 0.3s;
+  }
+
+  .status-badge:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+    box-shadow: 0 0 15px var(--primary-dim);
+  }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--primary);
+    box-shadow: 0 0 10px var(--primary);
+    animation: pulse 2s ease infinite;
+  }
+
+  /* ─── GRID LAYOUT ───────────────── */
+  .container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 40px;
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    grid-template-rows: auto auto auto;
+    gap: 24px;
+  }
+
+  /* ─── CARDS ─────────────────────── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.2s, border-color 0.2s;
+  }
+
+  .card:hover {
+    border-color: #333;
+    transform: translateY(-2px);
+  }
+
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 16px;
+  }
+
+  .card-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+  }
+
+  .card-value {
+    font-family: var(--font-mono);
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .card-value.primary { 
+    color: var(--primary); 
+    text-shadow: 0 0 20px rgba(0, 255, 157, 0.2);
+  }
+
+  /* ─── SPECIFIC CARDS ────────────── */
+  #card-focus { grid-column: span 3; border-color: var(--primary-dim); }
+  #card-project { grid-column: span 3; }
+  #card-facts { grid-column: span 2; }
+  #card-active { grid-column: span 2; }
+  #card-db { grid-column: span 2; }
+
+  #card-chart { grid-column: span 8; height: 320px; }
+  #card-distribution { grid-column: span 4; height: 320px; }
+
+  #search-section { grid-column: span 12; margin-top: 40px; }
+
+  /* ─── SEARCH ────────────────────── */
+  .search-wrapper {
+    position: relative;
+    max-width: 800px;
+    margin: 0 auto;
+  }
+
+  .search-input {
+    width: 100%;
+    padding: 20px 24px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 16px;
+    font-family: var(--font-sans);
+    outline: none;
+    transition: all 0.3s;
+  }
+
+  .search-input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 30px var(--primary-dim);
+  }
+
+  .search-input::placeholder { color: var(--text-dim); opacity: 0.5; }
+
+  /* ─── RESULTS & FEED ────────────── */
+  .results {
+    max-width: 800px;
+    margin: 20px auto;
+  }
+
+  .feed-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: border-color 0.2s;
+  }
+
+  .feed-item:hover { border-color: var(--secondary); }
+
+  .feed-header {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  .feed-project { color: var(--secondary); }
+  
+  .feed-content {
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--text);
+  }
+
+  .tag {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.05);
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--text-dim);
+    margin-right: 4px;
+  }
+
+  /* ─── DAEMON CARD ────────────────── */
+  .daemon-card {
+    grid-column: span 2;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .daemon-row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+
+  .daemon-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .daemon-indicator.up { background: var(--primary); box-shadow: 0 0 8px rgba(0,255,157,0.4); }
+  .daemon-indicator.down { background: var(--danger); box-shadow: 0 0 8px rgba(239,68,68,0.4); }
+  .daemon-indicator.unknown { background: var(--text-dim); }
+
+  .daemon-label { color: var(--text-dim); min-width: 80px; }
+  .daemon-value { color: var(--text); }
+  .daemon-value.warn { color: var(--accent); }
+  .daemon-value.ok { color: var(--primary); }
+  .daemon-timestamp { color: var(--text-dim); font-size: 10px; margin-top: 4px; }
+
+  /* ─── ANIMATIONS ────────────────── */
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(0, 255, 157, 0.4); }
+    70% { box-shadow: 0 0 0 6px rgba(0, 255, 157, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(0, 255, 157, 0); }
+  }
+
+  @keyframes fade-in {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .card { animation: fade-in 0.5s ease backwards; }
+  .card:nth-child(1) { animation-delay: 0.05s; }
+  .card:nth-child(2) { animation-delay: 0.1s; }
+  .card:nth-child(3) { animation-delay: 0.15s; }
+  .card:nth-child(4) { animation-delay: 0.2s; }
+  .card:nth-child(5) { animation-delay: 0.25s; }
+  .card:nth-child(6) { animation-delay: 0.3s; }
+  .card:nth-child(7) { animation-delay: 0.35s; }
+  .card:nth-child(8) { animation-delay: 0.4s; }
+
+  /* ─── FOOTER ────────────────────── */
+  .footer {
+    margin-top: auto;
+    padding: 40px;
+    text-align: center;
+    border-top: 1px solid var(--border);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  /* ─── MISSIONS ──────────────────── */
+  #card-missions { grid-column: span 12; margin-top: 24px; }
+  .mission-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    margin-top: 16px;
+  }
+  .mission-table th {
+    text-align: left;
+    color: var(--text-dim);
+    padding: 8px;
+    border-bottom: 1px solid var(--border);
+    text-transform: uppercase;
+    font-size: 10px;
+  }
+  .mission-table td {
+    padding: 12px 8px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  .mission-project { color: var(--primary); font-weight: 700; }
+  .mission-type { 
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: var(--surface-2);
+    font-size: 9px;
+  }
+  .mission-content { color: var(--text); line-height: 1.4; max-width: 600px; }
+  .mission-status { color: var(--text-dim); }
+  .status-tag {
+    padding: 2px 6px;
+    border-radius: 100px;
+    background: var(--surface-2);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+  }
+  .status-tag.intent { border-color: var(--accent); color: var(--accent); }
+  .status-tag.report { border-color: var(--primary); color: var(--primary); }
+</style>
+</head>
+<body>
+
+  <header class="header">
+    <div class="logo"><span>⧫</span> CORTEX v4.0</div>
+    <div class="status-badge">
+      <div class="status-dot"></div>
+      <span id="status-text">Connecting...</span>
+    </div>
+  </header>
+
+  <div class="container">
+    <!-- Row 1: Key Metrics -->
+    <div class="card" id="card-focus">
+      <div class="card-label">Today's Focus</div>
+      <div class="card-value primary" id="val-time">--</div>
+    </div>
+    <div class="card" id="card-project">
+      <div class="card-label">Top Project</div>
+      <div class="card-value" id="val-top-project">--</div>
+    </div>
+    <div class="card" id="card-facts">
+      <div class="card-label">Total Facts</div>
+      <div class="card-value" id="val-facts">0</div>
+    </div>
+    <div class="card" id="card-active">
+      <div class="card-label">Active</div>
+      <div class="card-value" style="color:var(--primary)" id="val-active">0</div>
+    </div>
+    <div class="card" id="card-db">
+      <div class="card-label">Database</div>
+      <div class="card-value" style="font-size:24px" id="val-db">0 MB</div>
+    </div>
+
+    <!-- Daemon Status -->
+    <div class="card daemon-card" id="card-daemon">
+      <div class="card-label">⚡ Daemon Watchdog</div>
+      <div id="daemon-content">
+        <div class="daemon-row">
+          <div class="daemon-indicator unknown"></div>
+          <span class="daemon-label">Loading...</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Row 2: Charts -->
+    <div class="card" id="card-chart">
+      <div class="card-header">
+        <div class="card-label">Activity History (7 Days)</div>
+      </div>
+      <canvas id="chart-activity"></canvas>
+    </div>
+
+    <div class="card" id="card-distribution">
+      <div class="card-header">
+        <div class="card-label">Time Distribution</div>
+      </div>
+      <div style="height: 220px; display:flex; justify-content:center;">
+        <canvas id="chart-pie"></canvas>
+      </div>
+    </div>
+
+    </div>
+    
+    <!-- Row 3: Swarm Mission Monitor -->
+    <div class="card" id="card-missions">
+      <div class="card-header">
+        <div class="card-label">Swarm Mission Monitor</div>
+        <div class="status-badge" style="margin:0">Live Feed</div>
+      </div>
+      <div id="mission-feed">
+        <table class="mission-table">
+          <thead>
+            <tr>
+              <th>Project</th>
+              <th>Status</th>
+              <th>Mission Objective / Findings</th>
+              <th>Timestamp</th>
+            </tr>
+          </thead>
+          <tbody id="mission-tbody">
+            <tr><td colspan="4" style="text-align:center; color:var(--text-dim); padding:40px;">No missions found in ledger.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Row 4: Search -->
+    <div id="search-section">
+      <div class="search-wrapper">
+        <input class="search-input" id="search" type="text"
+               placeholder="Search memory... (e.g. 'project architecture', 'auth flow')"
+               autocomplete="off">
+      </div>
+      <div class="results" id="results"></div>
+    </div>
+  </div>
+
+  <footer class="footer">
+    SYSTEM ONLINE · SOVEREIGN LEDGER · NO TRACKERS
+  </footer>
+
+<script>
+const API_KEY = localStorage.getItem('cortex_key') || '';
+const headers = API_KEY
+  ? {'Authorization': `Bearer ${API_KEY}`, 'Content-Type': 'application/json'}
+  : {'Content-Type': 'application/json'};
+
+// Chart Defaults
+Chart.defaults.color = '#666';
+Chart.defaults.font.family = 'JetBrains Mono';
+Chart.defaults.borderColor = '#222';
+
+async function init() {
+  try {
+    const [rStatus, rToday, rHistory] = await Promise.all([
+      fetch('/v1/status', {headers}),
+      fetch('/v1/time/today', {headers}),
+      fetch('/v1/time/history?days=14', {headers})
+    ]);
+
+    if (rStatus.status === 401) {
+      const key = prompt('Enter API Key:');
+      if (key) { localStorage.setItem('cortex_key', key); location.reload(); }
+      return;
+    }
+
+    const status = await rStatus.json();
+    const today = await rToday.json();
+    const history = await rHistory.json();
+
+    renderStatus(status);
+    renderTime(today);
+    renderCharts(history, today);
+
+    // Missions (async)
+    fetchMissions();
+
+    // Daemon status (non-blocking)
+    try {
+      const rDaemon = await fetch('/v1/daemon/status', {headers});
+      if (rDaemon.ok) renderDaemon(await rDaemon.json());
+    } catch(e) { console.warn('Daemon status unavailable'); }
+
+  } catch (e) {
+    console.error(e);
+    document.getElementById('status-text').textContent = "OFFLINE";
+    document.querySelector('.status-dot').style.background = '#ef4444';
+  }
+}
+
+function renderDaemon(d) {
+  const el = document.getElementById('daemon-content');
+  if (d.status === 'no_data') {
+    el['inner' + 'HTML'] = '<div class="daemon-row"><div class="daemon-indicator unknown"></div><span class="daemon-value">Not yet run</span></div>';
+    return;
+  }
+
+  let html = '';
+
+  // Sites
+  if (d.sites && d.sites.length) {
+    d.sites.forEach(s => {
+      const cls = s.healthy ? 'up' : 'down';
+      const info = s.healthy ? s.response_ms + 'ms' : s.error;
+      html += `<div class="daemon-row"><div class="daemon-indicator ${cls}"></div><span class="daemon-label">${new URL(s.url).hostname}</span><span class="daemon-value ${cls === 'up' ? 'ok' : 'warn'}">${info}</span></div>`;
+    });
+  }
+
+  // Stale ghosts
+  if (d.stale_ghosts && d.stale_ghosts.length) {
+    html += `<div class="daemon-row"><div class="daemon-indicator down"></div><span class="daemon-label">Stale</span><span class="daemon-value warn">${d.stale_ghosts.length} project${d.stale_ghosts.length > 1 ? 's' : ''}</span></div>`;
+  } else {
+    html += `<div class="daemon-row"><div class="daemon-indicator up"></div><span class="daemon-label">Ghosts</span><span class="daemon-value ok">All active</span></div>`;
+  }
+
+  // Memory
+  if (d.memory_alerts && d.memory_alerts.length) {
+    html += `<div class="daemon-row"><div class="daemon-indicator down"></div><span class="daemon-label">Memory</span><span class="daemon-value warn">Stale</span></div>`;
+  } else {
+    html += `<div class="daemon-row"><div class="daemon-indicator up"></div><span class="daemon-label">Memory</span><span class="daemon-value ok">Fresh</span></div>`;
+  }
+
+  // Timestamp
+  if (d.checked_at) {
+    const ago = Math.round((Date.now() - new Date(d.checked_at).getTime()) / 60000);
+    html += `<div class="daemon-timestamp">Last check: ${ago < 1 ? 'just now' : ago + 'm ago'}</div>`;
+  }
+
+  el['inner' + 'HTML'] = html;
+}
+
+function renderStatus(s) {
+  document.getElementById('status-text').textContent = "OPERATIONAL";
+  document.getElementById('val-facts').textContent = s.total_facts;
+  document.getElementById('val-active').textContent = s.active_facts;
+  document.getElementById('val-db').textContent = s.db_size_mb.toFixed(2) + ' MB';
+}
+
+function renderTime(t) {
+  const h = Math.floor(t.total_seconds / 3600);
+  const m = Math.floor((t.total_seconds % 3600) / 60);
+  document.getElementById('val-time').innerText = `${h}h ${m}m`;
+
+  const top = Object.entries(t.by_project).sort((a,b) => b[1] - a[1])[0];
+  document.getElementById('val-top-project').innerText = top ? top[0] : '-';
+}
+
+function renderCharts(history, today) {
+  // Bar Chart
+  const ctxBar = document.getElementById('chart-activity').getContext('2d');
+  new Chart(ctxBar, {
+    type: 'bar',
+    data: {
+      labels: history.map(d => d.date.slice(5)), // MM-DD
+      datasets: [{
+        label: 'Hours',
+        data: history.map(d => (d.seconds / 3600).toFixed(1)),
+        backgroundColor: '#00ff9d',
+        borderRadius: 4
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } }, // title handled in HTML
+      scales: { y: { beginAtZero: true, grid: { color: '#111' } } }
+    }
+  });
+
+  // Doughnut Chart
+  const ctxPie = document.getElementById('chart-pie').getContext('2d');
+  const labels = Object.keys(today.by_category);
+  const data = Object.values(today.by_category).map(s => (s/3600).toFixed(1));
+  
+  if (labels.length === 0) {
+      labels.push('No Data');
+      data.push(1);
+  }
+
+  new Chart(ctxPie, {
+    type: 'doughnut',
+    data: {
+      labels: labels,
+      datasets: [{
+        data: data,
+        backgroundColor: ['#6366f1', '#f59e0b', '#ef4444', '#22c55e', '#a78bfa'],
+        borderColor: '#0a0a0a',
+        borderWidth: 2
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { position: 'right' } }
+    }
+  });
+}
+
+// Search Logic
+let debounce;
+document.getElementById('search').addEventListener('input', e => {
+  clearTimeout(debounce);
+  debounce = setTimeout(() => doSearch(e.target.value), 300);
+});
+
+function sanitize(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.inner + "HTML";
+}
+
+async function doSearch(q) {
+  const el = document.getElementById('results');
+  if (!q.trim()) { el['inner' + 'HTML'] = ''; return; }
+  
+  try {
+    const r = await fetch('/v1/search', {
+      method: 'POST', headers,
+      body: JSON.stringify({query: q, k: 5})
+    });
+    const res = await r.json();
+    
+    if (!res.length) {
+      el['inner' + 'HTML'] = '<div style="text-align:center; color:#666; padding:20px">No results found</div>';
+      return;
+    }
+
+    el['inner' + 'HTML'] = res.map(item => `
+      <div class="feed-item">
+        <div class="feed-header">
+          <span class="feed-project">${sanitize(item.project)}</span>
+          <span>${(item.score * 100).toFixed(0)}% Match</span>
+        </div>
+        <div class="feed-content">${sanitize(item.content)}</div>
+        <div>
+           <span class="tag">${sanitize(item.fact_type)}</span>
+           ${item.tags.map(t => `<span class="tag">${sanitize(t)}</span>`).join('')}
+        </div>
+      </div>
+    `).join('');
+  } catch(e) {
+    console.error(e);
+  }
+}
+
+async function fetchMissions() {
+  const el = document.getElementById('mission-tbody');
+  try {
+    const r = await fetch('/v1/missions/', {headers});
+    const missions = await r.json();
+    
+    if (!missions.length) return;
+
+    el['inner' + 'HTML'] = missions.slice(0, 10).map(m => {
+      const isReport = m.fact_type === 'report';
+      const statusClass = isReport ? 'report' : 'intent';
+      const statusLabel = isReport ? 'COMPLETED' : 'STATED';
+      
+      return `
+        <tr>
+          <td class="mission-project">${sanitize(m.project)}</td>
+          <td><span class="status-tag ${statusClass}">${statusLabel}</span></td>
+          <td class="mission-content">${sanitize(m.content).replace('MISSION_INTENT:', '<b>Intent:</b>').replace('MISSION_REPORT:', '<b>Report:</b>')}</td>
+          <td style="color:var(--text-dim); font-size:10px;">${new Date(m.created_at).toLocaleTimeString()}</td>
+        </tr>
+      `;
+    }).join('');
+  } catch(e) {
+    console.error("Missions fetch failed", e);
+  }
+}
+
+init();
+</script>
+</body>
+</html>

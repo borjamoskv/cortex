@@ -35,7 +35,7 @@ def client(dashboard_env):
 def test_daily_method(client):
     """Test TimingTracker.daily() via the global tracker (lifespan-initialized)."""
     c, api_mod = client
-    tracker = api_mod.tracker
+    tracker = api_mod.app.state.tracker
 
     now = datetime.now(timezone.utc)
 

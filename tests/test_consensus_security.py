@@ -63,7 +63,7 @@ def test_consensus_tenant_isolation(client):
     
     # 3. Tenant 2 tries to vote on Tenant 1's fact (Should fail 403)
     resp = client.post(f"/v1/facts/{fact_id}/vote",
-        json={"agent": "spy", "vote": 1},
+        json={"value": 1},
         headers={"Authorization": f"Bearer {raw_key2}"}
     )
     assert resp.status_code == 403
@@ -77,7 +77,7 @@ def test_consensus_tenant_isolation(client):
     
     # 5. Tenant 1 votes on their own fact (Should succeed)
     resp = client.post(f"/v1/facts/{fact_id}/vote",
-        json={"agent": "valid_agent", "vote": 1},
+        json={"value": 1},
         headers={"Authorization": f"Bearer {raw_key1}"}
     )
     assert resp.status_code == 200

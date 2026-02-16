@@ -92,10 +92,11 @@ class TestSyncMemory:
 
     def test_sync_creates_facts(self, engine, agent_memory, monkeypatch):
         """Sync should create facts from all JSON files."""
-        monkeypatch.setattr("cortex.sync.MEMORY_DIR", agent_memory)
-        monkeypatch.setattr("cortex.sync.CORTEX_DIR", agent_memory.parent)
+        # Patch local reference in read.py
+        monkeypatch.setattr("cortex.sync.read.MEMORY_DIR", agent_memory)
+        # Patch shared state in common.py used by load_sync_state
         monkeypatch.setattr(
-            "cortex.sync.SYNC_STATE_FILE",
+            "cortex.sync.common.SYNC_STATE_FILE",
             agent_memory.parent / "sync_state.json",
         )
 
@@ -107,10 +108,9 @@ class TestSyncMemory:
 
     def test_sync_idempotent(self, engine, agent_memory, monkeypatch):
         """Running sync twice on unchanged files should not duplicate facts."""
-        monkeypatch.setattr("cortex.sync.MEMORY_DIR", agent_memory)
-        monkeypatch.setattr("cortex.sync.CORTEX_DIR", agent_memory.parent)
+        monkeypatch.setattr("cortex.sync.read.MEMORY_DIR", agent_memory)
         monkeypatch.setattr(
-            "cortex.sync.SYNC_STATE_FILE",
+            "cortex.sync.common.SYNC_STATE_FILE",
             agent_memory.parent / "sync_state.json",
         )
 
@@ -127,10 +127,9 @@ class TestSyncMemory:
         """Sync should handle missing memory files gracefully."""
         empty_dir = tmp_path / "empty_memory"
         empty_dir.mkdir(parents=True)
-        monkeypatch.setattr("cortex.sync.MEMORY_DIR", empty_dir)
-        monkeypatch.setattr("cortex.sync.CORTEX_DIR", tmp_path)
+        monkeypatch.setattr("cortex.sync.read.MEMORY_DIR", empty_dir)
         monkeypatch.setattr(
-            "cortex.sync.SYNC_STATE_FILE", tmp_path / "sync_state.json"
+            "cortex.sync.common.SYNC_STATE_FILE", tmp_path / "sync_state.json"
         )
 
         result = sync_memory(engine)
@@ -139,10 +138,9 @@ class TestSyncMemory:
 
     def test_sync_ghosts(self, engine, agent_memory, monkeypatch):
         """Sync should import ghosts correctly."""
-        monkeypatch.setattr("cortex.sync.MEMORY_DIR", agent_memory)
-        monkeypatch.setattr("cortex.sync.CORTEX_DIR", agent_memory.parent)
+        monkeypatch.setattr("cortex.sync.read.MEMORY_DIR", agent_memory)
         monkeypatch.setattr(
-            "cortex.sync.SYNC_STATE_FILE",
+            "cortex.sync.common.SYNC_STATE_FILE",
             agent_memory.parent / "sync_state.json",
         )
 
@@ -155,10 +153,9 @@ class TestWriteBack:
 
     def test_writeback_creates_files(self, engine, tmp_path, monkeypatch):
         """Write-back should create JSON files from DB facts."""
-        monkeypatch.setattr("cortex.sync.MEMORY_DIR", tmp_path / "memory")
-        monkeypatch.setattr("cortex.sync.CORTEX_DIR", tmp_path)
+        monkeypatch.setattr("cortex.sync.write.MEMORY_DIR", tmp_path / "memory")
         monkeypatch.setattr(
-            "cortex.sync.SYNC_STATE_FILE", tmp_path / "sync_state.json"
+             "cortex.sync.common.SYNC_STATE_FILE", tmp_path / "sync_state.json"
         )
 
         # Store test facts
@@ -175,10 +172,9 @@ class TestWriteBack:
 
     def test_writeback_sha_skip(self, engine, tmp_path, monkeypatch):
         """Second write-back with no changes should skip files."""
-        monkeypatch.setattr("cortex.sync.MEMORY_DIR", tmp_path / "memory")
-        monkeypatch.setattr("cortex.sync.CORTEX_DIR", tmp_path)
+        monkeypatch.setattr("cortex.sync.write.MEMORY_DIR", tmp_path / "memory")
         monkeypatch.setattr(
-            "cortex.sync.SYNC_STATE_FILE", tmp_path / "sync_state.json"
+            "cortex.sync.common.SYNC_STATE_FILE", tmp_path / "sync_state.json"
         )
 
         engine.store("test", "Some content", fact_type="knowledge")

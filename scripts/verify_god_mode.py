@@ -4,8 +4,17 @@ import os
 import sys
 import time
 
-API_URL = "http://localhost:8484"
-API_KEY = "ctx_ec22a93e6844e98a3839d818cba1e1bd2180eb5b09a05ef8a650ff455c8d9197"
+import requests
+import os
+import sys
+import time
+
+# Configuration with env var overrides
+API_PORT = os.getenv("CORTEX_PORT", "8484")
+API_URL = os.getenv("CORTEX_API_URL", f"http://localhost:{API_PORT}")
+# Default key from context, but prefer env var
+DEFAULT_KEY = "ctx_ec22a93e6844e98a3839d818cba1e1bd2180eb5b09a05ef8a650ff455c8d9197"
+API_KEY = os.getenv("CORTEX_API_KEY", DEFAULT_KEY)
 HEADERS = {"Authorization": f"Bearer {API_KEY}"}
 
 def check_status():

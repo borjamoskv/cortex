@@ -38,6 +38,7 @@ from cortex.routes import (
     graph as graph_router,
     ledger as ledger_router,
     missions as missions_router,
+    mejoralo as mejoralo_router,
 )
 
 logger = logging.getLogger("uvicorn.error")
@@ -191,4 +192,5 @@ app.include_router(agents_router.router)
 app.include_router(graph_router.router)
 app.include_router(ledger_router.router)
 app.include_router(missions_router.router)
+app.include_router(mejoralo_router.router)
 app.include_router(hive_router)

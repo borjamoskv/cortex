@@ -174,3 +174,62 @@ class CheckpointResponse(BaseModel):
     checkpoint_id: Optional[int]
     message: str
     status: str = "success"
+
+
+# ─── MEJORAlo Models ────────────────────────────────────────────────
+
+class MejoraloScanRequest(BaseModel):
+    project: str = Field(..., max_length=100)
+    path: str = Field(..., description="Ruta al directorio del proyecto")
+    deep: bool = Field(False, description="Activa dimensión Psi + análisis profundo")
+
+
+class DimensionResultModel(BaseModel):
+    name: str
+    score: int = Field(..., ge=0, le=100)
+    weight: str
+    findings: List[str] = Field(default_factory=list)
+
+
+class MejoraloScanResponse(BaseModel):
+    project: str
+    score: int
+    stack: str
+    dimensions: List[DimensionResultModel]
+    dead_code: bool
+    total_files: int = 0
+    total_loc: int = 0
+    fact_id: Optional[int] = None
+
+
+class MejoraloSessionRequest(BaseModel):
+    project: str = Field(..., max_length=100)
+    score_before: int = Field(..., ge=0, le=100)
+    score_after: int = Field(..., ge=0, le=100)
+    actions: List[str] = Field(default_factory=list)
+
+
+class MejoraloSessionResponse(BaseModel):
+    fact_id: int
+    project: str
+    delta: int
+    status: str = "recorded"
+
+
+class MejoraloShipRequest(BaseModel):
+    project: str = Field(..., max_length=100)
+    path: str = Field(..., description="Ruta al directorio del proyecto")
+
+
+class ShipSealModel(BaseModel):
+    name: str
+    passed: bool
+    detail: str = ""
+
+
+class MejoraloShipResponse(BaseModel):
+    project: str
+    ready: bool
+    seals: List[ShipSealModel]
+    passed: int
+    total: int = 7

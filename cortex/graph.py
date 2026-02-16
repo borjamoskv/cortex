@@ -222,7 +222,29 @@ class SQLiteBackend(GraphBackend):
                 "type": row[3], "weight": row[4],
             })
 
-        return {"entities": entities, "relationships": relationships}
+        # Stats
+        if project:
+            total_entities = self.conn.execute(
+                "SELECT COUNT(*) FROM entities WHERE project = ?", (project,)
+            ).fetchone()[0]
+            # Approximate rel count by source entity project
+            total_rels = self.conn.execute(
+                """SELECT COUNT(*) FROM entity_relations er
+                   JOIN entities e ON er.source_entity_id = e.id
+                   WHERE e.project = ?""", (project,)
+            ).fetchone()[0]
+        else:
+            total_entities = self.conn.execute("SELECT COUNT(*) FROM entities").fetchone()[0]
+            total_rels = self.conn.execute("SELECT COUNT(*) FROM entity_relations").fetchone()[0]
+
+        return {
+            "entities": entities,
+            "relationships": relationships,
+            "stats": {
+                "total_entities": total_entities,
+                "total_relationships": total_rels
+            }
+        }
 
     def query_entity(self, name: str, project: Optional[str] = None) -> Optional[dict]:
         if not name or not name.strip(): return None
@@ -263,6 +285,29 @@ class SQLiteBackend(GraphBackend):
             for c in connections
         ]
         return entity
+
+    def upsert_ghost(self, reference: str, context: str, project: str, timestamp: str) -> int:
+        row = self.conn.execute(
+            "SELECT id FROM ghosts WHERE reference = ? AND project = ? AND status = 'open'",
+            (reference, project),
+        ).fetchone()
+
+        if row:
+            return row[0]
+        else:
+            cursor = self.conn.execute(
+                """INSERT INTO ghosts (reference, context, project, detected_at, status)
+                   VALUES (?, ?, ?, ?, 'open')""",
+                (reference, context, project, timestamp),
+            )
+            return cursor.lastrowid
+
+    def resolve_ghost(self, ghost_id: int, target_id: int, confidence: float, timestamp: str) -> bool:
+        cursor = self.conn.execute(
+            "UPDATE ghosts SET status = 'resolved', resolved_at = ?, target_id = ?, confidence = ? WHERE id = ?",
+            (timestamp, target_id, confidence, ghost_id),
+        )
+        return cursor.rowcount > 0
 
 # ─── Neo4j Backend ───────────────────────────────────────────────────
 

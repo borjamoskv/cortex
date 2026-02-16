@@ -19,7 +19,7 @@ def init(db) -> None:
     """Initialize CORTEX database."""
     engine = get_engine(db)
     try:
-        engine.init_db()
+        engine.init_db_sync()
         console.print(Panel(
             f"[bold green]✓ CORTEX v{__version__} initialized[/]\n"
             f"Database: {engine._db_path}",
@@ -43,7 +43,7 @@ def store(project, content, fact_type, tags, confidence, source, db) -> None:
     engine = get_engine(db)
     try:
         tag_list = [t.strip() for t in tags.split(",")] if tags else None
-        fact_id = engine.store(
+        fact_id = engine.store_sync(
             project=project, content=content, fact_type=fact_type,
             tags=tag_list, confidence=confidence, source=source,
         )
@@ -62,7 +62,7 @@ def search(query, project, top, db) -> None:
     engine = get_engine(db)
     try:
         with console.status("[bold blue]Searching...[/]"):
-            results = engine.search(query, project=project, top_k=top)
+            results = engine.search_sync(query, project=project, top_k=top)
         if not results:
             console.print("[yellow]No results found.[/]")
             return
@@ -87,7 +87,7 @@ def recall(project, db) -> None:
     """Load full context for a project."""
     engine = get_engine(db)
     try:
-        facts = engine.recall(project)
+        facts = engine.recall_sync(project)
         if not facts:
             console.print(f"[yellow]No facts found for project '{project}'[/]")
             return
@@ -115,7 +115,7 @@ def history(project, as_of, db) -> None:
     """Temporal query: what did we know at a specific time?"""
     engine = get_engine(db)
     try:
-        facts = engine.history(project, as_of=as_of)
+        facts = engine.history_sync(project, as_of=as_of)
         label = f"as of {as_of}" if as_of else "all time"
         console.print(Panel(
             f"[bold]{project}[/] — {len(facts)} facts ({label})",
@@ -136,7 +136,7 @@ def status(db, json_output) -> None:
     engine = get_engine(db)
     try:
         try:
-            s = engine.stats()
+            s = engine.stats_sync()
         except (sqlite3.OperationalError, FileNotFoundError) as e:
             console.print(f"[red]Error: {e}[/]")
             console.print("[dim]Run 'cortex init' first.[/]")

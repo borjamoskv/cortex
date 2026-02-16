@@ -19,7 +19,7 @@ def delete(fact_id, reason, db) -> None:
     """Soft-delete: depreca un fact y auto-sincroniza JSON."""
     engine = get_engine(db)
     try:
-        conn = engine.get_connection()
+        conn = engine._get_sync_conn()
         row = conn.execute(
             "SELECT project, content, fact_type FROM facts WHERE id = ? AND valid_until IS NULL",
             (fact_id,),
@@ -31,7 +31,7 @@ def delete(fact_id, reason, db) -> None:
             f"[dim]Deprecando:[/] [bold]#{fact_id}[/] "
             f"[cyan]{row[0]}[/] ({row[2]}) — {row[1][:80]}..."
         )
-        success = engine.deprecate(fact_id, reason or "deleted-via-cli")
+        success = engine.deprecate_sync(fact_id, reason or "deleted-via-cli")
         if success:
             wb = export_to_json(engine)
             console.print(
@@ -53,7 +53,7 @@ def list_facts(project, fact_type, limit, db) -> None:
     """Listar facts activos (tabulado)."""
     engine = get_engine(db)
     try:
-        conn = engine.get_connection()
+        conn = engine._get_sync_conn()
         query = """
             SELECT id, project, content, fact_type, tags, created_at
             FROM facts WHERE valid_until IS NULL
@@ -86,7 +86,7 @@ def list_facts(project, fact_type, limit, db) -> None:
             table.add_row(str(row[0]), row[1], row[3], content_preview, tags_str)
         console.print(table)
     finally:
-        engine.close()
+        engine.close_sync()
 
 
 @cli.command()
@@ -97,7 +97,7 @@ def edit(fact_id, new_content, db) -> None:
     """Editar un fact: depreca el viejo y crea uno nuevo con el contenido actualizado."""
     engine = get_engine(db)
     try:
-        conn = engine.get_connection()
+        conn = engine._get_sync_conn()
         row = conn.execute(
             "SELECT project, content, fact_type, tags, confidence, source FROM facts "
             "WHERE id = ? AND valid_until IS NULL",
@@ -111,8 +111,8 @@ def edit(fact_id, new_content, db) -> None:
             tags = json.loads(tags_json) if tags_json else None
         except (json.JSONDecodeError, TypeError):
             tags = None
-        engine.deprecate(fact_id, "edited → new version")
-        new_id = engine.store(
+        engine.deprecate_sync(fact_id, "edited → new version")
+        new_id = engine.store_sync(
             project=project, content=new_content, fact_type=fact_type,
             tags=tags, confidence=confidence, source=source or "edit-via-cli",
         )
@@ -124,4 +124,4 @@ def edit(fact_id, new_content, db) -> None:
             f"  Write-back: {wb.files_written} archivos actualizados."
         )
     finally:
-        engine.close()
+        engine.close_sync()

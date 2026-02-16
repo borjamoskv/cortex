@@ -69,7 +69,7 @@ GET  /dashboard                  # Industrial Noir dashboard UI
 
 ## Architecture
 
-```
+```text
 SQLite + sqlite-vec (vector search)
   + Temporal Facts (valid_from/valid_until)
   + ONNX Embeddings (local, ~5ms/embed)
@@ -78,6 +78,7 @@ SQLite + sqlite-vec (vector search)
   + Persistent Daemon (launchd)
   = The Sovereign Ledger
 ```
+
 
 ## Testing
 

@@ -14,7 +14,6 @@ pip install cortex-memory
 ### Optional extras
 
 === "API Server"
-
     ```bash
     pip install cortex-memory[api]
     ```
@@ -22,7 +21,6 @@ pip install cortex-memory
     Includes FastAPI, Uvicorn, and HTTPX for the REST API and dashboard.
 
 === "Development"
-
     ```bash
     pip install cortex-memory[dev]
     ```
@@ -30,7 +28,6 @@ pip install cortex-memory
     Includes pytest, pytest-cov, and HTTPX for testing.
 
 === "Everything"
-
     ```bash
     pip install cortex-memory[all]
     ```

@@ -222,6 +222,216 @@ class SyncCompatMixin:
         conn.commit()
         return score
 
+    # ─── Ledger (Sync) ──────────────────────────────────────────
+
+    def _log_transaction_sync(self, conn, project, action, detail) -> int:
+        """Synchronous version of _log_transaction."""
+        from cortex.canonical import canonical_json, compute_tx_hash
+
+        dj = canonical_json(detail)
+        ts = now_iso()
+        cursor = conn.execute(
+            "SELECT hash FROM transactions ORDER BY id DESC LIMIT 1"
+        )
+        prev = cursor.fetchone()
+        ph = prev[0] if prev else "GENESIS"
+        th = compute_tx_hash(ph, project, action, dj, ts)
+        
+        c = conn.execute(
+            "INSERT INTO transactions "
+            "(project, action, detail, prev_hash, hash, timestamp) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (project, action, dj, ph, th, ts),
+        )
+        tx_id = c.lastrowid
+        
+        # Note: Auto-checkpoint is skipped in sync mode for now to avoid complexity
+        return tx_id
+
+    def deprecate_sync(self, fact_id: int, reason: Optional[str] = None) -> bool:
+        """Synchronous version of deprecate."""
+        if not isinstance(fact_id, int) or fact_id <= 0:
+            raise ValueError("Invalid fact_id")
+        
+        conn = self._get_sync_conn()
+        ts = now_iso()
+        cursor = conn.execute(
+            "UPDATE facts SET valid_until = ?, updated_at = ?, "
+            "meta = json_set(COALESCE(meta, '{}'), '$.deprecation_reason', ?) "
+            "WHERE id = ? AND valid_until IS NULL",
+            (ts, ts, reason or "deprecated", fact_id),
+        )
+
+        if cursor.rowcount > 0:
+            cursor = conn.execute(
+                "SELECT project FROM facts WHERE id = ?", (fact_id,)
+            )
+            row = cursor.fetchone()
+            self._log_transaction_sync(
+                conn,
+                row[0] if row else "unknown",
+                "deprecate",
+                {"fact_id": fact_id, "reason": reason},
+            )
+            # CDC: Encole for Neo4j sync (table graph_outbox)
+            conn.execute(
+                "INSERT INTO graph_outbox (fact_id, action, status) VALUES (?, ?, ?)",
+                (fact_id, "deprecate_fact", "pending")
+            )
+            conn.commit()
+            return True
+        return False
+
+    def recall_sync(
+        self,
+        project: str,
+        limit: Optional[int] = None,
+        offset: int = 0,
+    ) -> list[Fact]:
+        """Synchronous version of recall."""
+        from cortex.engine.query_mixin import _FACT_COLUMNS, _FACT_JOIN
+
+        conn = self._get_sync_conn()
+        query = f"""
+            SELECT {_FACT_COLUMNS}
+            {_FACT_JOIN}
+            WHERE f.project = ? AND f.valid_until IS NULL
+            ORDER BY (
+                f.consensus_score * 0.8
+                + (1.0 / (1.0 + (julianday('now') - julianday(f.created_at)))) * 0.2
+            ) DESC, f.fact_type, f.created_at DESC
+        """
+        params: list = [project]
+        if limit:
+            query += " LIMIT ?"
+            params.append(limit)
+        if offset:
+            query += " OFFSET ?"
+            params.append(offset)
+        
+        cursor = conn.execute(query, params)
+        rows = cursor.fetchall()
+        return [self._row_to_fact(row) for row in rows]
+
+    def history_sync(
+        self,
+        project: str,
+        as_of: Optional[str] = None,
+    ) -> list[Fact]:
+        """Synchronous version of history."""
+        from cortex.engine.query_mixin import _FACT_COLUMNS, _FACT_JOIN
+        from cortex.temporal import build_temporal_filter_params
+
+        conn = self._get_sync_conn()
+        if as_of:
+            clause, params = build_temporal_filter_params(as_of, table_alias="f")
+            query = (
+                f"SELECT {_FACT_COLUMNS} {_FACT_JOIN} "
+                f"WHERE f.project = ? AND {clause} "
+                "ORDER BY f.valid_from DESC"
+            )
+            cursor = conn.execute(query, [project] + params)
+        else:
+            query = (
+                f"SELECT {_FACT_COLUMNS} {_FACT_JOIN} "
+                "WHERE f.project = ? "
+                "ORDER BY f.valid_from DESC"
+            )
+            cursor = conn.execute(query, (project,))
+        
+        rows = cursor.fetchall()
+        return [self._row_to_fact(row) for row in rows]
+
+    def stats_sync(self) -> dict:
+        """Synchronous version of stats."""
+        conn = self._get_sync_conn()
+        
+        cursor = conn.execute("SELECT COUNT(*) FROM facts")
+        total = cursor.fetchone()[0]
+
+        cursor = conn.execute(
+            "SELECT COUNT(*) FROM facts WHERE valid_until IS NULL"
+        )
+        active = cursor.fetchone()[0]
+
+        cursor = conn.execute(
+            "SELECT DISTINCT project FROM facts WHERE valid_until IS NULL"
+        )
+        projects = [p[0] for p in cursor.fetchall()]
+
+        cursor = conn.execute(
+            "SELECT fact_type, COUNT(*) "
+            "FROM facts WHERE valid_until IS NULL "
+            "GROUP BY fact_type"
+        )
+        types = dict(cursor.fetchall())
+
+        cursor = conn.execute("SELECT COUNT(*) FROM transactions")
+        tx_count = cursor.fetchone()[0]
+
+        db_size = (
+            self._db_path.stat().st_size / (1024 * 1024)
+            if self._db_path.exists()
+            else 0
+        )
+
+        try:
+            cursor = conn.execute("SELECT COUNT(*) FROM fact_embeddings")
+            embeddings = cursor.fetchone()[0]
+        except Exception:
+            embeddings = 0
+
+        return {
+            "total_facts": total,
+            "active_facts": active,
+            "deprecated_facts": total - active,
+            "projects": projects,
+            "project_count": len(projects),
+            "types": types,
+            "transactions": tx_count,
+            "embeddings": embeddings,
+            "db_path": str(self._db_path),
+            "db_size_mb": round(db_size, 2),
+        }
+
+    def register_ghost_sync(
+        self, reference: str, context: str, project: str
+    ) -> int:
+        """Register a ghost synchronously."""
+        conn = self._get_sync_conn()
+        cursor = conn.execute(
+            "SELECT id FROM ghosts WHERE reference = ? AND project = ?",
+            (reference, project),
+        )
+        row = cursor.fetchone()
+        if row:
+            return row[0]
+
+        ts = now_iso()
+        cursor = conn.execute(
+            "INSERT INTO ghosts "
+            "(reference, context, project, status, created_at) "
+            "VALUES (?, ?, ?, 'open', ?)",
+            (reference, context, project, ts),
+        )
+        ghost_id = cursor.lastrowid
+        conn.commit()
+        return ghost_id
+
+    def resolve_ghost_sync(
+        self, ghost_id: int, target_entity_id: int, confidence: float = 1.0
+    ) -> bool:
+        """Resolve a ghost synchronously."""
+        conn = self._get_sync_conn()
+        ts = now_iso()
+        cursor = conn.execute(
+            "UPDATE ghosts SET status = 'resolved', target_id = ?, "
+            "confidence = ?, resolved_at = ? WHERE id = ?",
+            (target_entity_id, confidence, ts, ghost_id),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
     # ─── Cleanup ────────────────────────────────────────────────
 
     def close_sync(self):

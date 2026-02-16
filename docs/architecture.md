@@ -80,7 +80,7 @@ Every fact has a temporal window (`valid_from` → `valid_until`). This enables:
 
 Every mutation (store, deprecate, edit) creates a **transaction** with a SHA-256 hash linked to the previous transaction. This creates a tamper-evident audit trail.
 
-```
+```text
 TX #1: hash = SHA256(data_1)
 TX #2: hash = SHA256(data_2 + hash_1)
 TX #3: hash = SHA256(data_3 + hash_2)
@@ -88,6 +88,7 @@ TX #3: hash = SHA256(data_3 + hash_2)
 ```
 
 ### Embeddings
+
 
 Text is embedded locally using `all-MiniLM-L6-v2` via ONNX Runtime (~5ms per embedding). Vectors are stored and indexed using `sqlite-vec` for fast cosine-similarity search.
 

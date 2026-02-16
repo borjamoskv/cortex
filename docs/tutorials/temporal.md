@@ -57,16 +57,21 @@ curl http://localhost:8742/recall/my-api?as_of=2026-01-20T00:00:00
 
 1. **Incident occurs** at a specific time
 2. **Query CORTEX** for the state at that time:
+
    ```bash
    cortex history production --at "2026-02-10T03:15:00"
    ```
+
 3. **Compare** with current state:
+
    ```bash
    cortex recall production
    ```
+
 4. **Identify** what changed between then and now
 
 ## Transaction Ledger
+
 
 Every mutation is recorded in the hash-chained ledger, giving you a complete audit trail:
 

@@ -24,11 +24,11 @@ def db_path(tmp_path):
     """Create a temp database with test data."""
     path = tmp_path / "test.db"
     engine = CortexEngine(db_path=path)
-    engine.init_db()
-    engine.store("test-project", "First test fact", fact_type="knowledge")
-    engine.store("test-project", "Second test fact", fact_type="error")
-    engine.store("other-project", "Third test fact", fact_type="ghost")
-    engine.close()
+    engine.init_db_sync()
+    engine.store_sync("test-project", "First test fact", fact_type="knowledge")
+    engine.store_sync("test-project", "Second test fact", fact_type="error")
+    engine.store_sync("other-project", "Third test fact", fact_type="ghost")
+    engine.close_sync()
     return str(path)
 
 

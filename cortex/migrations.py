@@ -320,6 +320,26 @@ def _migration_011_link_facts_to_tx(conn: sqlite3.Connection):
     conn.commit()
 
 
+def _migration_012_ghosts_table(conn: sqlite3.Connection):
+    """Create the ghosts table for tracking dangling references."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS ghosts (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            reference       TEXT NOT NULL,
+            context         TEXT,
+            project         TEXT NOT NULL,
+            status          TEXT NOT NULL DEFAULT 'open',
+            detected_at     TEXT NOT NULL,
+            resolved_at     TEXT,
+            target_id       INTEGER REFERENCES entities(id),
+            confidence      REAL DEFAULT 0.0
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ghosts_project ON ghosts(project)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ghosts_status ON ghosts(status)")
+    logger.info("Migration 012: Created 'ghosts' table")
+
+
 # ─── Migration Registry ──────────────────────────────────────────────
 
 MIGRATIONS = [
@@ -334,6 +354,7 @@ MIGRATIONS = [
     (9, "Reputation-Weighted Consensus", _migration_009_reputation_consensus),
     (10, "Immutable Ledger (Merkle)", _migration_010_immutable_ledger),
     (11, "Link facts to transactions", _migration_011_link_facts_to_tx),
+    (12, "Add ghosts table", _migration_012_ghosts_table),
 ]
 
 

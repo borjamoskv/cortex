@@ -51,9 +51,9 @@ class SearchResult(BaseModel):
 
 
 class VoteRequest(BaseModel):
-    vote: int = Field(..., description="1 to verify, -1 to dispute, 0 to remove")
+    value: int = Field(..., description="1 to verify, -1 to dispute, 0 to remove")
 
-    @field_validator("vote")
+    @field_validator("value")
     @classmethod
     def valid_vote(cls, v: int) -> int:
         if v not in (1, -1, 0):
@@ -133,17 +133,3 @@ class TimeSummaryResponse(BaseModel):
     entries: int
     heartbeats: int
     top_entities: list[list]  # [[entity, count], ...]
-
-
-class AgentRegisterRequest(BaseModel):
-    name: str = Field(..., max_length=100)
-    agent_type: str = Field("fractal", max_length=50)
-    public_key: Optional[str] = None
-
-
-class AgentResponse(BaseModel):
-    agent_id: int
-    name: str
-    agent_type: str
-    reputation_score: float
-    created_at: str

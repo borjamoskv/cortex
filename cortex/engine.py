@@ -45,6 +45,7 @@ class Fact:
     source: Optional[str]
     meta: dict
     consensus_score: float = 1.0
+    tx_id: Optional[int] = None
 
     def is_active(self) -> bool:
         return self.valid_until is None
@@ -179,6 +180,7 @@ class CortexEngine:
         meta: Optional[dict] = None,
         valid_from: Optional[str] = None,
         commit: bool = True,
+        tx_id: Optional[int] = None,
     ) -> int:
         """Store a fact with automatic embedding and temporal metadata.
 
@@ -192,6 +194,7 @@ class CortexEngine:
             meta: Additional metadata dict.
             valid_from: When fact became valid (default: now).
             commit: Whether to commit the transaction (False for batch ops).
+            tx_id: Optional transaction ID to link to.
 
         Returns:
             The fact ID.
@@ -209,11 +212,11 @@ class CortexEngine:
         cursor = conn.execute(
             """
             INSERT INTO facts (project, content, fact_type, tags, confidence,
-                              valid_from, source, meta, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                              valid_from, source, meta, created_at, updated_at, tx_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (project, content, fact_type, tags_json, confidence,
-             ts, source, meta_json, ts, ts),
+             ts, source, meta_json, ts, ts, tx_id),
         )
         fact_id = cursor.lastrowid
 
@@ -238,11 +241,14 @@ class CortexEngine:
             logger.warning("Graph extraction failed for fact %d: %s", fact_id, e)
 
         # Log transaction
-        self._log_transaction(conn, project, "store", {
+        tx_id = self._log_transaction(conn, project, "store", {
             "fact_id": fact_id,
             "fact_type": fact_type,
             "content_preview": content[:100],
         })
+        
+        # Link fact to this transaction (Atomic)
+        conn.execute("UPDATE facts SET tx_id = ? WHERE id = ?", (tx_id, fact_id))
 
         if commit:
             conn.commit()
@@ -769,8 +775,12 @@ class CortexEngine:
         project: str,
         action: str,
         detail: dict,
-    ) -> None:
-        """Log an action to the immutable transaction ledger."""
+    ) -> int:
+        """Log an action to the immutable transaction ledger.
+        
+        Returns:
+            The transaction ID (tx_id).
+        """
         detail_json = json.dumps(detail, default=str)
         ts = now_iso()
 
@@ -784,19 +794,23 @@ class CortexEngine:
         hash_input = f"{prev_hash}:{project}:{action}:{detail_json}:{ts}"
         tx_hash = hashlib.sha256(hash_input.encode()).hexdigest()
 
-        conn.execute(
+        cursor = conn.execute(
             """
             INSERT INTO transactions (project, action, detail, prev_hash, hash, timestamp)
             VALUES (?, ?, ?, ?, ?, ?)
             """,
             (project, action, detail_json, prev_hash, tx_hash, ts),
         )
+        return cursor.lastrowid
 
     # ─── Helpers ──────────────────────────────────────────────────
 
-    @staticmethod
-    def _row_to_fact(row: tuple) -> Fact:
-        """Convert a database row to a Fact object."""
+    def _row_to_fact(self, row: tuple) -> Fact:
+        """Convert a database row to a Fact object.
+        
+        Expected column order:
+        id, project, content, fact_type, tags, confidence, valid_from, valid_until, source, meta, consensus_score, [tx_id]
+        """
         try:
             tags = json.loads(row[4]) if row[4] else []
         except (json.JSONDecodeError, TypeError):
@@ -819,7 +833,52 @@ class CortexEngine:
             source=row[8],
             meta=meta,
             consensus_score=row[10] if len(row) > 10 else 1.0,
+            tx_id=row[11] if len(row) > 11 else None,
         )
+
+    # ─── Wave 6: Temporal Navigation ──────────────────────────────
+
+    def reconstruct_state(self, target_tx_id: int, project: Optional[str] = None) -> list[Fact]:
+        """Reconstruct the active database state at a specific transaction ID.
+        
+        Args:
+            target_tx_id: The transaction ID to target.
+            project: Optional project scope.
+            
+        Returns:
+            List of Facts that were active at that point.
+        """
+        conn = self._get_conn()
+        
+        # 1. Get the timestamp of the target transaction
+        tx = conn.execute("SELECT timestamp FROM transactions WHERE id = ?", (target_tx_id,)).fetchone()
+        if not tx:
+            raise ValueError(f"Transaction ID {target_tx_id} not found")
+        
+        tx_time = tx[0]
+        
+        # 2. Query facts that were:
+        # - Created BEFORE or AT tx_time
+        # - NOT deprecated OR deprecated AFTER tx_time
+        # - AND linked to tx_id <= target_tx_id (Precise check)
+        
+        query = """
+            SELECT id, project, content, fact_type, tags, confidence,
+                   valid_from, valid_until, source, meta, consensus_score, tx_id
+            FROM facts
+            WHERE (created_at <= ? AND (valid_until IS NULL OR valid_until > ?))
+              AND (tx_id IS NULL OR tx_id <= ?)
+        """
+        params = [tx_time, tx_time, target_tx_id]
+        
+        if project:
+            query += " AND project = ?"
+            params.append(project)
+            
+        query += " ORDER BY id ASC"
+        
+        cursor = conn.execute(query, params)
+        return [self._row_to_fact(row) for row in cursor.fetchall()]
 
     def close(self) -> None:
         """Close database connection."""

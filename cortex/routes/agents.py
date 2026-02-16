@@ -23,7 +23,7 @@ async def register_agent(
             api_state.engine.register_agent,
             name=req.name,
             agent_type=req.agent_type,
-            public_key=req.public_key,
+            public_key=req.public_key or "",
             tenant_id=auth.tenant_id
         )
         

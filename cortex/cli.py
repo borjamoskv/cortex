@@ -610,24 +610,217 @@ def vote(fact_id, value, agent, db) -> None:
         engine.close()
 
 
-@cli.command()
-@click.option("--host", default="0.0.0.0", help="Host interface")
-@click.option("--port", default=8000, help="API port")
-@click.option("--reload", is_flag=True, help="Auto-reload on change")
-def serve(host, port, reload) -> None:
-    """Start the CORTEX API server."""
+@cli.group()
+def ledger():
+    """Manage the immutable transaction ledger."""
+    pass
+
+
+@ledger.command("verify")
+@click.option("--db", default=DEFAULT_DB, help="Database path")
+def ledger_verify(db):
+    """Verify cryptographic integrity of the ledger."""
+    from cortex.ledger import ImmutableLedger
+    engine = get_engine(db)
     try:
-        import uvicorn
-        console.print(Panel(
-            f"[bold green]🚀 CORTEX API v{__version__}[/]\n"
-            f"Host: {host}:{port}\n"
-            f"Docs: http://localhost:{port}/docs",
-            title="🧠 Neural Hive Backend",
-            border_style="green",
-        ))
-        uvicorn.run("cortex.api:app", host=host, port=port, reload=reload)
-    except ImportError:
-        console.print("[red]✗ uvicorn not installed. Run: pip install uvicorn[/]")
+        _ledger = ImmutableLedger(engine.get_connection())
+        with console.status("[bold blue]Verifying ledger integrity...[/]"):
+            report = _ledger.verify_integrity()
+
+        if report["valid"]:
+            console.print(Panel(
+                f"[bold green]✅ Ledger Integrity: OK[/]\n"
+                f"Transactions checked: {report['tx_checked']}\n"
+                f"Merkle roots checked: {report['roots_checked']}",
+                title="🔐 Immutable Ledger",
+                border_style="green",
+            ))
+        else:
+            console.print(Panel(
+                f"[bold red]❌ Ledger Integrity: VIOLATION DETECTED[/]\n"
+                f"Violations found: {len(report['violations'])}",
+                title="🔐 Immutable Ledger",
+                border_style="red",
+            ))
+            for v in report["violations"]:
+                console.print(f"  [red]✗[/] {v['type']} (TX #{v.get('tx_id', 'N/A')}): {v}")
+            sys.exit(1)
+    finally:
+        engine.close()
+
+
+@ledger.command("checkpoint")
+@click.option("--db", default=DEFAULT_DB, help="Database path")
+def ledger_checkpoint(db):
+    """Create a new Merkle tree checkpoint for recent transactions."""
+    from cortex.ledger import ImmutableLedger
+    engine = get_engine(db)
+    try:
+        _ledger = ImmutableLedger(engine.get_connection())
+        with console.status("[bold blue]Creating checkpoint...[/]"):
+            checkpoint_id = _ledger.create_checkpoint()
+
+        if checkpoint_id:
+            console.print(f"[green]✓[/] Created Merkle checkpoint [bold]#{checkpoint_id}[/]")
+        else:
+            console.print("[yellow]! Not enough transactions for a new checkpoint.[/]")
+    finally:
+        engine.close()
+
+
+@cli.group()
+def timeline():
+    """Navigate the CORTEX timeline and manage snapshots."""
+    pass
+
+
+@timeline.command("log")
+@click.option("--limit", "-n", default=20, help="Number of transactions")
+@click.option("--db", default=DEFAULT_DB, help="Database path")
+def timeline_log(limit, db):
+    """Show the transaction history ledger."""
+    engine = get_engine(db)
+    try:
+        conn = engine.get_connection()
+        rows = conn.execute(
+            "SELECT id, project, action, hash, timestamp FROM transactions ORDER BY id DESC LIMIT ?",
+            (limit,)
+        ).fetchall()
+
+        if not rows:
+            console.print("[yellow]No transactions found.[/]")
+            return
+
+        table = Table(title="📜 Transaction Ledger")
+        table.add_column("TX ID", style="bold", width=8)
+        table.add_column("Project", style="cyan", width=15)
+        table.add_column("Action", style="magenta", width=10)
+        table.add_column("Hash", style="dim", width=16)
+        table.add_column("Timestamp", width=20)
+
+        for row in rows:
+            table.add_row(
+                f"#{row[0]}",
+                row[1],
+                row[2],
+                row[3][:12] + "...",
+                row[4]
+            )
+        console.print(table)
+    finally:
+        engine.close()
+
+
+@timeline.command("checkout")
+@click.argument("tx_id", type=int)
+@click.option("--project", "-p", default=None, help="Filter by project")
+@click.option("--db", default=DEFAULT_DB, help="Database path")
+def timeline_checkout(tx_id, project, db):
+    """Reconstruct state at a specific transaction ID."""
+    engine = get_engine(db)
+    try:
+        with console.status(f"[bold blue]Reconstructing state at TX #{tx_id}...[/]"):
+            facts = engine.reconstruct_state(tx_id, project=project)
+
+        if not facts:
+            console.print(f"[yellow]No active facts at TX #{tx_id}.[/]")
+            return
+
+        title = f"🕰 State at TX #{tx_id}"
+        if project:
+            title += f" (Project: {project})"
+            
+        table = Table(title=title)
+        table.add_column("ID", style="bold", width=5)
+        table.add_column("Project", style="cyan", width=15)
+        table.add_column("Type", style="magenta", width=10)
+        table.add_column("Content", width=50)
+        table.add_column("Score", style="green", width=6)
+
+        for f in facts:
+            table.add_row(
+                str(f.id),
+                f.project,
+                f.fact_type,
+                f.content[:50] + "..." if len(f.content) > 50 else f.content,
+                f"{f.consensus_score:.2f}"
+            )
+        console.print(table)
+    finally:
+        engine.close()
+
+
+@timeline.group("snapshot")
+def timeline_snapshot():
+    """Manage physical database snapshots."""
+    pass
+
+
+@timeline_snapshot.command("create")
+@click.argument("name")
+@click.option("--db", default=DEFAULT_DB, help="Database path")
+def snapshot_create(name, db):
+    """Create a new physical snapshot."""
+    from cortex.snapshots import SnapshotManager
+    from cortex.ledger import ImmutableLedger
+    
+    engine = get_engine(db)
+    try:
+        conn = engine.get_connection()
+        
+        # Get latest TX and Merkle Root for metadata
+        ledger = ImmutableLedger(conn)
+        latest_tx = conn.execute("SELECT id FROM transactions ORDER BY id DESC LIMIT 1").fetchone()
+        tx_id = latest_tx[0] if latest_tx else 0
+        
+        # Best effort: get latest merkle root
+        root_row = conn.execute("SELECT root_hash FROM merkle_roots ORDER BY id DESC LIMIT 1").fetchone()
+        merkle_root = root_row[0] if root_row else "0xGENESIS"
+        
+        sm = SnapshotManager(db_path=db)
+        with console.status("[bold blue]Creating physical snapshot...[/]"):
+            snap = sm.create_snapshot(name, tx_id, merkle_root)
+            
+        console.print(f"[green]✓[/] Snapshot [bold]'{name}'[/] created successfully.")
+        console.print(f"  [dim]Path:[/] {snap.path}")
+        console.print(f"  [dim]TX ID:[/] {snap.tx_id}")
+        console.print(f"  [dim]Size:[/] {snap.size_mb} MB")
+    finally:
+        engine.close()
+
+
+@timeline_snapshot.command("list")
+@click.option("--db", default=DEFAULT_DB, help="Database path")
+def snapshot_list(db):
+    """List all available snapshots."""
+    from cortex.snapshots import SnapshotManager
+    sm = SnapshotManager(db_path=db)
+    snaps = sm.list_snapshots()
+    
+    if not snaps:
+        console.print("[yellow]No snapshots found.[/]")
+        return
+        
+    table = Table(title="💾 CORTEX Snapshots")
+    table.add_column("Name", style="bold", width=20)
+    table.add_column("TX ID", style="cyan", width=8)
+    table.add_column("Created At", width=20)
+    table.add_column("Size", width=10)
+    
+    for s in snaps:
+        table.add_row(
+            s.name,
+            str(s.tx_id),
+            s.created_at[:19].replace("T", " "),
+            f"{s.size_mb} MB"
+        )
+    console.print(table)
+
+
+# ─── Registration ────────────────────────────────────────────────
+
+cli.add_command(ledger)
+cli.add_command(timeline)
 
 
 if __name__ == "__main__":

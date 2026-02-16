@@ -1,16 +1,11 @@
-"""
-CORTEX v4.0 — MCP Server.
-
-Model Context Protocol server exposing CORTEX as tools for any AI agent.
-Uses FastMCP (mcp Python SDK) for stdio transport.
-"""
-
 from __future__ import annotations
 
 import atexit
 import json
 import logging
-from typing import Optional
+import os
+from functools import lru_cache
+from typing import List, Optional
 
 logger = logging.getLogger("cortex.mcp")
 
@@ -28,17 +23,7 @@ except ImportError:
 
 
 def create_mcp_server(db_path: str = "~/.cortex/cortex.db") -> "FastMCP":
-    """Create and configure a CORTEX MCP server instance.
-
-    Args:
-        db_path: Path to CORTEX database.
-
-    Returns:
-        Configured FastMCP server ready to run.
-
-    Raises:
-        ImportError: If MCP SDK is not installed.
-    """
+    """Create and configure a CORTEX MCP server instance."""
     if not _MCP_AVAILABLE:
         raise ImportError(
             "MCP SDK not installed. Install with: pip install mcp\n"
@@ -46,6 +31,7 @@ def create_mcp_server(db_path: str = "~/.cortex/cortex.db") -> "FastMCP":
         )
 
     from cortex.engine import CortexEngine
+    from cortex.ledger import ImmutableLedger
 
     mcp = FastMCP(
         "CORTEX Memory",
@@ -53,16 +39,24 @@ def create_mcp_server(db_path: str = "~/.cortex/cortex.db") -> "FastMCP":
         "Store, search, and recall facts with semantic search and temporal queries.",
     )
 
+    # Resolve path once
+    full_db_path = os.path.expanduser(db_path)
+    
     # Lazy engine initialization
-    _engine: dict = {}
+    _state: dict = {}
 
     def get_engine() -> CortexEngine:
-        if "instance" not in _engine:
-            eng = CortexEngine(db_path=db_path)
+        if "engine" not in _state:
+            eng = CortexEngine(db_path=full_db_path)
             eng.init_db()
-            _engine["instance"] = eng
+            _state["engine"] = eng
             atexit.register(eng.close)
-        return _engine["instance"]
+        return _state["engine"]
+
+    @lru_cache(maxsize=128)
+    def cached_search(query: str, project: Optional[str], top_k: int):
+        engine = get_engine()
+        return engine.search(query=query, project=project, top_k=top_k)
 
     # ─── Tools ────────────────────────────────────────────────────
 
@@ -74,18 +68,7 @@ def create_mcp_server(db_path: str = "~/.cortex/cortex.db") -> "FastMCP":
         tags: str = "[]",
         source: str = "",
     ) -> str:
-        """Store a fact in CORTEX memory.
-
-        Args:
-            project: Project/namespace for the fact (e.g., 'myproject').
-            content: The fact content to store.
-            fact_type: Type: knowledge, decision, mistake, bridge, ghost.
-            tags: JSON array of tags, e.g. '["important", "bug"]'.
-            source: Where this fact came from.
-
-        Returns:
-            Confirmation with the fact ID.
-        """
+        """Store a fact in CORTEX memory."""
         engine = get_engine()
         try:
             parsed_tags = json.loads(tags) if tags else []
@@ -99,7 +82,41 @@ def create_mcp_server(db_path: str = "~/.cortex/cortex.db") -> "FastMCP":
             tags=parsed_tags,
             source=source or None,
         )
+        # Invalidate search cache on store
+        cached_search.cache_clear()
         return f"✓ Stored fact #{fact_id} in project '{project}'"
+
+    @mcp.tool()
+    def cortex_batch_store(
+        project: str,
+        facts_json: str,
+    ) -> str:
+        """Store multiple facts in a single transaction.
+        
+        Args:
+            project: Project/namespace for the facts.
+            facts_json: JSON array of objects: [{"content": "...", "type": "...", "tags": [...], "source": "..."}]
+        """
+        engine = get_engine()
+        try:
+            facts = json.loads(facts_json)
+        except json.JSONDecodeError:
+            return "Error: Invalid JSON input for facts_json"
+
+        results = []
+        with engine.get_connection() as conn:
+            for f in facts:
+                fid = engine.store(
+                    project=project,
+                    content=f.get("content", ""),
+                    fact_type=f.get("type", "knowledge"),
+                    tags=f.get("tags", []),
+                    source=f.get("source"),
+                )
+                results.append(fid)
+        
+        cached_search.cache_clear()
+        return f"✓ Stored {len(results)} facts in project '{project}' (IDs: {results})"
 
     @mcp.tool()
     def cortex_search(
@@ -107,22 +124,8 @@ def create_mcp_server(db_path: str = "~/.cortex/cortex.db") -> "FastMCP":
         project: str = "",
         top_k: int = 5,
     ) -> str:
-        """Search CORTEX memory using semantic + text hybrid search.
-
-        Args:
-            query: Natural language search query.
-            project: Optional project filter.
-            top_k: Number of results (1-20).
-
-        Returns:
-            Formatted search results with scores.
-        """
-        engine = get_engine()
-        results = engine.search(
-            query=query,
-            project=project or None,
-            top_k=min(max(top_k, 1), 20),
-        )
+        """Search CORTEX memory using semantic + text hybrid search."""
+        results = cached_search(query, project or None, min(max(top_k, 1), 20))
 
         if not results:
             return "No results found."
@@ -140,15 +143,7 @@ def create_mcp_server(db_path: str = "~/.cortex/cortex.db") -> "FastMCP":
         project: str,
         limit: int = 20,
     ) -> str:
-        """Load all active facts for a project.
-
-        Args:
-            project: Project to recall facts from.
-            limit: Maximum facts to return.
-
-        Returns:
-            Formatted list of project facts.
-        """
+        """Load all active facts for a project."""
         engine = get_engine()
         facts = engine.recall(project=project, limit=limit)
 
@@ -166,58 +161,92 @@ def create_mcp_server(db_path: str = "~/.cortex/cortex.db") -> "FastMCP":
         return "\n".join(lines)
 
     @mcp.tool()
-    def cortex_graph(
-        project: str = "",
-        limit: int = 30,
-    ) -> str:
-        """Show the entity-relationship knowledge graph.
-
-        Args:
-            project: Optional project filter.
-            limit: Max entities to show.
-
+    def cortex_ledger_status() -> str:
+        """Check the cryptographic integrity of the CORTEX ledger.
+        
         Returns:
-            Formatted entity graph with relationships.
+            Integrity status and violation details if any.
         """
         engine = get_engine()
-        data = engine.graph(project=project or None, limit=limit)
-
-        if not data["entities"]:
-            return "No entities in the knowledge graph yet."
-
-        lines = [f"🧠 Knowledge Graph ({data['stats']['total_entities']} entities, "
-                 f"{data['stats']['total_relationships']} relationships):\n"]
-
-        for ent in data["entities"]:
-            lines.append(f"  • {ent['name']} ({ent['type']}) — {ent['mentions']} mentions")
-
-        if data["relationships"]:
-            lines.append("\nRelationships:")
-            id_to_name = {e["id"]: e["name"] for e in data["entities"]}
-            for rel in sorted(data["relationships"], key=lambda r: -r["weight"])[:10]:
-                src = id_to_name.get(rel["source"], f"#{rel['source']}")
-                tgt = id_to_name.get(rel["target"], f"#{rel['target']}")
-                lines.append(f"  {src} ──[{rel['type']}]── {tgt} (w={rel['weight']:.1f})")
-
-        return "\n".join(lines)
+        ledger = ImmutableLedger(engine.get_connection())
+        report = ledger.verify_integrity()
+        
+        if report["valid"]:
+            return (f"✅ Ledger Integrity: OK\n"
+                    f"Transactions verified: {report['tx_checked']}\n"
+                    f"Merkle checkpoints verified: {report['roots_checked']}")
+        else:
+            return (f"❌ Ledger Integrity: VIOLATION DETECTED\n"
+                    f"Violations: {json.dumps(report['violations'], indent=2)}")
 
     @mcp.tool()
     def cortex_status() -> str:
-        """Get CORTEX system status and statistics.
-
-        Returns:
-            System health and statistics summary.
-        """
+        """Get CORTEX system status and statistics."""
         engine = get_engine()
         stats = engine.stats()
         return (
-            f"CORTEX Status:\n"
+            f"CORTEX Status (MCP v2):\n"
             f"  Facts: {stats.get('total_facts', 0)} total, "
             f"{stats.get('active_facts', 0)} active\n"
             f"  Projects: {stats.get('projects', 0)}\n"
-            f"  Embeddings: {stats.get('embeddings', 0)}\n"
-            f"  DB Size: {stats.get('db_size_mb', 0):.1f} MB"
+            f"  Transactions: {stats.get('transactions', 0)}\n"
+            f"  DB Size: {stats.get('db_size_mb', 0):.1f} MB\n"
+            f"  Search Cache: {cached_search.cache_info()}"
         )
+
+    @mcp.tool()
+    def cortex_timeline_reconstruct(
+        tx_id: int,
+        project: str = "",
+    ) -> str:
+        """Reconstruct the database state at a specific transaction ID.
+        
+        Args:
+            tx_id: The transaction ID to reconstruct.
+            project: Optional filter by project.
+        """
+        engine = get_engine()
+        try:
+            facts = engine.reconstruct_state(tx_id, project=project or None)
+        except ValueError as e:
+            return f"Error: {e}"
+
+        if not facts:
+            return f"No active facts at TX #{tx_id}."
+
+        lines = [f"🕰 State at TX #{tx_id}:\n"]
+        for f in facts:
+            lines.append(f"  #{f.id} [{f.project}/{f.fact_type}]: {f.content[:150]}")
+        return "\n".join(lines)
+
+    @mcp.tool()
+    def cortex_snapshot_create(
+        name: str,
+    ) -> str:
+        """Create a full physical database snapshot for safe-keeping.
+        
+        Args:
+            name: A descriptive name for the snapshot.
+        """
+        from cortex.snapshots import SnapshotManager
+        from cortex.ledger import ImmutableLedger
+        
+        engine = get_engine()
+        conn = engine.get_connection()
+        
+        ledger = ImmutableLedger(conn)
+        latest_tx = conn.execute("SELECT id FROM transactions ORDER BY id DESC LIMIT 1").fetchone()
+        tx_id = latest_tx[0] if latest_tx else 0
+        
+        root_row = conn.execute("SELECT root_hash FROM merkle_roots ORDER BY id DESC LIMIT 1").fetchone()
+        merkle_root = root_row[0] if root_row else "0xGENESIS"
+        
+        sm = SnapshotManager(db_path=full_db_path)
+        snap = sm.create_snapshot(name, tx_id, merkle_root)
+        
+        return (f"✓ Snapshot '{name}' created.\n"
+                f"  TX ID: {snap.tx_id}\n"
+                f"  Path: {snap.path}")
 
     # ─── Resources ────────────────────────────────────────────────
 
@@ -233,18 +262,11 @@ def create_mcp_server(db_path: str = "~/.cortex/cortex.db") -> "FastMCP":
         projects = [r[0] for r in rows]
         return json.dumps({"projects": projects, "count": len(projects)})
 
-    @mcp.resource("cortex://stats")
-    def memory_stats() -> str:
-        """Get CORTEX memory statistics."""
-        engine = get_engine()
-        stats = engine.stats()
-        return json.dumps(stats)
-
     return mcp
 
 
 def run_server(db_path: str = "~/.cortex/cortex.db") -> None:
     """Start the CORTEX MCP server (stdio transport)."""
     mcp = create_mcp_server(db_path)
-    logger.info("Starting CORTEX MCP server (stdio transport)...")
+    logger.info("Starting CORTEX MCP server v2 (stdio transport)...")
     mcp.run()

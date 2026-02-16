@@ -39,7 +39,8 @@ def client(monkeypatch):
         c.headers = {"Authorization": f"Bearer {raw_key}"}
         yield c
     
-    api_state.engine.close()
+    if getattr(api_state, "engine", None):
+        api_state.engine.close()
     if os.path.exists(test_db):
         try:
             os.remove(test_db)
@@ -64,7 +65,7 @@ def test_consensus_flow(client):
     assert fact["confidence"] == "stated"
     
     # 3. Vote UP
-    resp = client.post(f"/v1/facts/{fact_id}/vote", json={"vote": 1})
+    resp = client.post(f"/v1/facts/{fact_id}/vote", json={"value": 1})
     assert resp.status_code == 200, resp.json()
     assert resp.json()["new_consensus_score"] == 1.1
     assert resp.json()["agent"] == "test_agent"

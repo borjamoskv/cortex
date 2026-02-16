@@ -10,7 +10,10 @@ from starlette.concurrency import run_in_threadpool
 
 from cortex import api_state
 from cortex.auth import AuthResult, require_permission
-from cortex.models import StoreRequest, StoreResponse, FactResponse, VoteRequest, VoteResponse
+from cortex.models import (
+    StoreRequest, StoreResponse, FactResponse, 
+    VoteRequest, VoteResponse, VoteV2Request
+)
 
 logger = logging.getLogger("cortex.api.facts")
 router = APIRouter(tags=["facts"])
@@ -105,7 +108,7 @@ async def cast_vote(
             fact_id=fact_id,
             agent=agent_id,
             vote=req.value,
-            new_score=score,
+            new_consensus_score=score,
             confidence=confidence
         )
     except HTTPException:
@@ -115,6 +118,113 @@ async def cast_vote(
     except Exception as e:
         logger.exception("Unexpected error during voting for fact #%d", fact_id)
         raise HTTPException(status_code=500, detail="Internal server error")
+@router.post("/v1/facts/{fact_id}/vote-v2", response_model=VoteResponse)
+async def cast_vote_v2(
+    fact_id: int,
+    req: VoteV2Request,
+    auth: AuthResult = Depends(require_permission("write")),
+) -> VoteResponse:
+    """Cast a reputation-weighted consensus vote (RWC)."""
+    try:
+        # Ownership check
+        def _check_owner():
+            with api_state.engine._get_conn() as conn:
+                row = conn.execute("SELECT project FROM facts WHERE id = ?", (fact_id,)).fetchone()
+                return row[0] if row else None
+
+        project = await run_in_threadpool(_check_owner)
+        if not project:
+            raise HTTPException(status_code=404, detail=f"Fact #{fact_id} not found")
+        if project != auth.tenant_id:
+            raise HTTPException(status_code=403, detail="Forbidden: Fact belongs to another tenant")
+
+        # Cast RWC vote
+        score = await run_in_threadpool(
+            api_state.engine.vote, 
+            fact_id=fact_id, 
+            agent=auth.key_name or "api_agent", 
+            value=req.vote, 
+            agent_id=req.agent_id
+        )
+
+        # Get updated confidence for the response
+        def _fetch_fact_status():
+            with api_state.engine._get_conn() as conn:
+                row = conn.execute("SELECT confidence FROM facts WHERE id = ?", (fact_id,)).fetchone()
+                return row[0] if row else "unknown"
+
+        confidence = await run_in_threadpool(_fetch_fact_status)
+
+        return VoteResponse(
+            fact_id=fact_id,
+            agent=req.agent_id,
+            vote=req.vote,
+            new_consensus_score=score,
+            confidence=confidence
+        )
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception:
+        logger.exception("RWC Vote failed")
+        raise HTTPException(status_code=500, detail="Internal voting error")
+
+
+@router.get("/v1/facts/{fact_id}/votes", response_model=List[dict])
+async def get_votes(
+    fact_id: int,
+    auth: AuthResult = Depends(require_permission("read")),
+) -> List[dict]:
+    """Retrieve all votes for a specific fact (Tenant Isolated)."""
+    # Ownership check
+    def _check_owner():
+        with api_state.engine._get_conn() as conn:
+            row = conn.execute("SELECT project FROM facts WHERE id = ?", (fact_id,)).fetchone()
+            return row[0] if row else None
+
+    project = await run_in_threadpool(_check_owner)
+    if not project:
+        raise HTTPException(status_code=404, detail=f"Fact #{fact_id} not found")
+    if project != auth.tenant_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    def _get_votes():
+        with api_state.engine._get_conn() as conn:
+            # Combined query for legacy and v2 votes
+            v2_votes = conn.execute(
+                """
+                SELECT 'v2' as type, v.vote, v.agent_id as agent, v.created_at, a.reputation_score
+                FROM consensus_votes_v2 v
+                JOIN agents a ON v.agent_id = a.id
+                WHERE v.fact_id = ?
+                """,
+                (fact_id,)
+            ).fetchall()
+            
+            legacy_votes = conn.execute(
+                """
+                SELECT 'legacy' as type, vote, agent, timestamp as created_at, 0.0 as reputation_score
+                FROM consensus_votes
+                WHERE fact_id = ?
+                """,
+                (fact_id,)
+            ).fetchall()
+            
+            return [
+                {
+                    "type": r[0],
+                    "vote": r[1],
+                    "agent": r[2],
+                    "timestamp": r[3],
+                    "reputation": r[4]
+                }
+                for r in (v2_votes + legacy_votes)
+            ]
+
+    votes = await run_in_threadpool(_get_votes)
+    return votes
+
 
 
 @router.delete("/v1/facts/{fact_id}")

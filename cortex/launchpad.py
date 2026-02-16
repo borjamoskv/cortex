@@ -74,6 +74,10 @@ class MissionOrchestrator:
         # 3. Execute (Async-ish for now, but blocking in CLI)
         try:
             logger.info(f"Executing swarm mission: {' '.join(cmd)}")
+            
+            # Close connection to avoid locking if subprocess tries to write to the same DB
+            self.engine.close()
+            
             result = subprocess.run(
                 cmd, 
                 capture_output=True, 

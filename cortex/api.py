@@ -33,6 +33,7 @@ from cortex.routes import (
     daemon as daemon_router,
     dashboard as dashboard_router,
     agents as agents_router,
+    graph as graph_router,
 )
 
 logger = logging.getLogger("uvicorn.error")
@@ -180,4 +181,5 @@ app.include_router(timing_router.router)
 app.include_router(daemon_router.router)
 app.include_router(dashboard_router.router)
 app.include_router(agents_router.router)
+app.include_router(graph_router.router)
 app.include_router(hive_router)

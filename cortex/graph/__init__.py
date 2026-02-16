@@ -8,8 +8,11 @@ from cortex.graph.engine import (
     extract_entities,
     get_backend,
     get_graph,
+    get_graph_sync,
     process_fact_graph,
+    process_fact_graph_sync,
     query_entity,
+    query_entity_sync,
 )
 from cortex.graph.types import Entity, Ghost, Relationship
 
@@ -23,8 +26,11 @@ __all__ = [
     "extract_entities",
     "detect_relationships",
     "process_fact_graph",
+    "process_fact_graph_sync",
     "get_graph",
+    "get_graph_sync",
     "query_entity",
+    "query_entity_sync",
     "get_backend",
 ]
 

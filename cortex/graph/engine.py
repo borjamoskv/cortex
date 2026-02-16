@@ -147,6 +147,68 @@ async def process_fact_graph(
         return 0, 0
 
 
+def process_fact_graph_sync(
+    conn, fact_id: int, content: str, project: str, timestamp: str
+) -> tuple[int, int]:
+    """Process a fact for graph extraction (sync)."""
+    entities = extract_entities(content)
+    if not entities:
+        return 0, 0
+    relationships = detect_relationships(content, entities)
+
+    try:
+        backend = get_backend(conn)
+        entity_ids: dict[str, int] = {}
+        for ent in entities:
+            eid = backend.upsert_entity_sync(
+                ent["name"], ent["entity_type"], project, timestamp
+            )
+            entity_ids[ent["name"]] = eid
+
+        for rel in relationships:
+            source_id = entity_ids.get(rel["source_name"])
+            target_id = entity_ids.get(rel["target_name"])
+            if source_id and target_id:
+                backend.upsert_relationship_sync(
+                    source_id, target_id, rel["relation_type"], fact_id, timestamp
+                )
+        return len(entities), len(relationships)
+    except Exception as e:
+        logger.warning("Graph processing sync failed for fact %d: %s", fact_id, e)
+        return 0, 0
+
+
+def process_fact_graph_sync(
+    conn, fact_id: int, content: str, project: str, timestamp: str
+) -> tuple[int, int]:
+    """Process a fact for graph extraction (sync)."""
+    entities = extract_entities(content)
+    if not entities:
+        return 0, 0
+    relationships = detect_relationships(content, entities)
+
+    try:
+        backend = get_backend(conn)
+        entity_ids: dict[str, int] = {}
+        for ent in entities:
+            eid = backend.upsert_entity_sync(
+                ent["name"], ent["entity_type"], project, timestamp
+            )
+            entity_ids[ent["name"]] = eid
+
+        for rel in relationships:
+            source_id = entity_ids.get(rel["source_name"])
+            target_id = entity_ids.get(rel["target_name"])
+            if source_id and target_id:
+                backend.upsert_relationship_sync(
+                    source_id, target_id, rel["relation_type"], fact_id, timestamp
+                )
+        return len(entities), len(relationships)
+    except Exception as e:
+        logger.warning("Graph processing sync failed for fact %d: %s", fact_id, e)
+        return 0, 0
+
+
 async def get_graph(
     conn, project: Optional[str] = None, limit: int = 50
 ) -> dict:
@@ -161,6 +223,22 @@ async def get_graph(
     return await backend.get_graph(project, limit)
 
 
+def get_graph_sync(
+    conn, project: Optional[str] = None, limit: int = 50
+) -> dict:
+    """Get graph data synchronously."""
+    backend = get_backend(conn)
+    return backend.get_graph_sync(project, limit)
+
+
+def get_graph_sync(
+    conn, project: Optional[str] = None, limit: int = 50
+) -> dict:
+    """Get graph data synchronously."""
+    backend = get_backend(conn)
+    return backend.get_graph_sync(project, limit)
+
+
 async def query_entity(
     conn, name: str, project: Optional[str] = None
 ) -> Optional[dict]:
@@ -173,6 +251,22 @@ async def query_entity(
     """
     backend = get_backend(conn)
     return await backend.query_entity(name, project)
+
+
+def query_entity_sync(
+    name: str, project: Optional[str] = None
+) -> Optional[dict]:
+    """Query entity synchronously."""
+    backend = get_backend(conn)
+    return backend.query_entity_sync(name, project)
+
+
+def query_entity_sync(
+    name: str, project: Optional[str] = None
+) -> Optional[dict]:
+    """Query entity synchronously."""
+    backend = get_backend(conn)
+    return backend.query_entity_sync(name, project)
 
 
 async def find_path(

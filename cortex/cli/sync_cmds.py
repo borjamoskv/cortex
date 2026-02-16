@@ -44,7 +44,8 @@ def sync(db) -> None:
             for err in result.errors:
                 console.print(f"[red]  ✗ {err}[/]")
     finally:
-        engine.close()
+        # Fix: engine.close is async
+        _run_async(engine.close())
 
 
 @cli.command()
@@ -59,7 +60,8 @@ def export(db, out) -> None:
         _run_async(export_snapshot(engine, out_path))
         console.print(f"[green]✓[/] Snapshot exportado a [cyan]{out_path}[/]")
     finally:
-        engine.close()
+        # Fix: engine.close is async
+        _run_async(engine.close())
 
 
 @cli.command()
@@ -88,4 +90,5 @@ def writeback(db) -> None:
         for err in result.errors:
             console.print(f"[red]  ✗ {err}[/]")
     finally:
-        engine.close()
+        # Fix: engine.close is async
+        _run_async(engine.close())

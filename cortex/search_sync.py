@@ -91,7 +91,7 @@ def semantic_search_sync(
             tags = []
 
         # Convert distance to similarity score (1 - distance for cosine)
-        score = 1.0 - (row[7] if row[7] else 0.0)
+        score = max(0.0, 1.0 - (row[7] if row[7] else 0.0))
         results.append(SyncSearchResult(
             fact_id=row[0],
             content=row[1],

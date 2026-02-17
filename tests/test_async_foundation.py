@@ -106,23 +106,34 @@ async def test_pool_concurrency_limit(pool):
 
 @pytest.mark.asyncio
 async def test_engine_crud(engine):
+    print("\n--- Starting Engine CRUD test ---")
     # Store
+    print("Storing fact...")
     fid = await engine.store("test-proj", "Hello Async World", fact_type="test")
     assert fid > 0
-
+    print(f"Fact stored with ID: {fid}")
+    
     # Retrieve
+    print(f"Retrieving fact #{fid}...")
     fact = await engine.retrieve(fid)
     assert fact["content"] == "Hello Async World"
     assert fact["project"] == "test-proj"
-
+    print("Fact retrieved successfully")
+    
     # Search
+    print("Searching for 'Async'...")
     results = await engine.search("Async", project="test-proj")
     assert len(results) == 1
     assert results[0].fact_id == fid
-
+    print("Search successful")
+    
     # Delete
+    print(f"Deleting fact #{fid}...")
     assert await engine.delete_fact(fid)
-
+    print("Fact deleted")
+    
     # Verify missing
+    print("Verifying fact is missing...")
     with pytest.raises(FactNotFound):
         await engine.retrieve(fid)
+    print("--- Engine CRUD test PASSED ---")

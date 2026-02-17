@@ -32,14 +32,21 @@ def client(monkeypatch):
     monkeypatch.setattr(cortex.api, "DB_PATH", test_db)
     monkeypatch.setattr(cortex.auth, "_auth_manager", None)
 
-    with TestClient(app) as c:
-        raw_key, _ = api_state.auth_manager.create_key(
-            "test_agent",
-            tenant_id="test_proj",
-            permissions=["read", "write", "admin"],
-        )
-        c.headers = {"Authorization": f"Bearer {raw_key}"}
-        yield c
+    # Mock Embedder to avoid model download/hang
+    with mock.patch("cortex.embeddings.LocalEmbedder") as mock_embedder:
+        instance = mock_embedder.return_value
+        instance.embed.return_value = [0.1] * 384
+        instance.embed_batch.return_value = [[0.1] * 384]
+        instance.dimension = 384
+
+        with TestClient(app) as c:
+            raw_key, _ = api_state.auth_manager.create_key(
+                "test_agent",
+                tenant_id="test_proj",
+                permissions=["read", "write", "admin"],
+            )
+            c.headers = {"Authorization": f"Bearer {raw_key}"}
+            yield c
 
 
 def test_consensus_flow(client):

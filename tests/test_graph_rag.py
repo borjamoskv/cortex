@@ -18,9 +18,9 @@ async def test_engine_graph_rag_methods(engine_with_graph):
     
     # Store some facts with connections
     # Use keyword args to avoid ambiguity
-    await engine.store(content="Angular is a frontend framework.", project=project) 
-    await engine.store(content="TypeScript is a superset of JavaScript.", project=project)
-    await engine.store(content="Angular uses TypeScript for development.", project=project)
+    await engine.store(project=project, content="Angular is a frontend framework.") 
+    await engine.store(project=project, content="TypeScript is a superset of JavaScript.")
+    await engine.store(project=project, content="Angular uses TypeScript for development.")
 
     # Test get_context_subgraph
     subgraph = await engine.get_context_subgraph(["Angular"], depth=2)

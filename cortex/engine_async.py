@@ -1,42 +1,53 @@
+import asyncio
 import logging
 import json
+import hashlib
 import uuid
+import time
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Dict, List, Optional
+from typing import Any, AsyncIterator, Dict, List, Optional, Union
+from datetime import datetime
 from pathlib import Path
+from collections import deque
 
 import aiosqlite
 from cortex.connection_pool import CortexConnectionPool
 from cortex.temporal import now_iso
 from cortex.canonical import canonical_json, compute_tx_hash
 from cortex.consensus.vote_ledger import ImmutableVoteLedger
-from cortex.search import semantic_search, text_search
 from cortex.embeddings import LocalEmbedder
 from cortex.engine.ledger import ImmutableLedger
 from cortex.graph import get_graph as _get_graph
 
+# Mixins
+from cortex.engine.store_mixin import StoreMixin
+from cortex.engine.search_mixin import SearchMixin
+from cortex.engine.agent_mixin import AgentMixin
+
 logger = logging.getLogger("cortex.engine.async")
 
-
-class AsyncCortexEngine:
+class AsyncCortexEngine(StoreMixin, SearchMixin, AgentMixin):
     """
     Native async database engine for CORTEX.
-    Protocol: MEJORAlo God Mode 7.3 - Wave 5 Structural Correction
+    Protocol: MEJORAlo God Mode 8.0 - Wave 3 Structural Correction
     """
-
+    
     FACT_COLUMNS = (
         "f.id, f.project, f.content, f.fact_type, f.tags, f.confidence, "
         "f.valid_from, f.valid_until, f.source, f.meta, f.consensus_score, "
         "f.created_at, f.updated_at, f.tx_id, t.hash"
     )
     FACT_JOIN = "FROM facts f LEFT JOIN transactions t ON f.tx_id = t.id"
-
-    def __init__(self, pool: CortexConnectionPool, db_path: str, auto_embed: bool = True):
+    
+    def __init__(self, pool: CortexConnectionPool, db_path: str):
         self._pool = pool
         self._db_path = Path(db_path)
-        self._auto_embed = auto_embed
         self._embedder: Optional[LocalEmbedder] = None
         self._ledger: Optional[ImmutableLedger] = None
+        
+        # Mixin configuration
+        self._auto_embed = True
+        self._vec_available = True  # Assuming local vector availability
 
     @asynccontextmanager
     async def session(self) -> AsyncIterator[aiosqlite.Connection]:
@@ -54,90 +65,26 @@ class AsyncCortexEngine:
             self._ledger = ImmutableLedger(self._pool)
         return self._ledger
 
-    async def _log_transaction(
-        self, conn: aiosqlite.Connection, project: str, action: str, detail: Dict[str, Any]
-    ) -> int:
+    async def _log_transaction(self, conn: aiosqlite.Connection, project: str, action: str, detail: Dict[str, Any]) -> int:
         dj = canonical_json(detail)
         ts = now_iso()
         async with conn.execute("SELECT hash FROM transactions ORDER BY id DESC LIMIT 1") as cursor:
             prev = await cursor.fetchone()
             ph = prev[0] if prev else "GENESIS"
-
+        
         th = compute_tx_hash(ph, project, action, dj, ts)
-
+        
         cursor = await conn.execute(
             "INSERT INTO transactions (project, action, detail, prev_hash, hash, timestamp) VALUES (?, ?, ?, ?, ?, ?)",
-            (project, action, dj, ph, th, ts),
+            (project, action, dj, ph, th, ts)
         )
         tx_id = cursor.lastrowid
         self._get_ledger().record_write()
         return tx_id
 
-    async def store(
-        self,
-        project: str,
-        content: str,
-        fact_type: str = "knowledge",
-        tags: List[str] = None,
-        confidence: str = "stated",
-        valid_from: Optional[str] = None,
-        valid_until: Optional[str] = None,
-        source: Optional[str] = None,
-        meta: Optional[Dict[str, Any]] = None,
-        tx_id: Optional[int] = None,
-    ) -> int:
-        tags_json = json.dumps(tags or [])
-        meta_json = json.dumps(meta or {})
-        ts = valid_from or now_iso()
-
-        async with self._pool.acquire() as conn:
-            await conn.execute("BEGIN IMMEDIATE")
-            try:
-                cursor = await conn.execute(
-                    """
-                    INSERT INTO facts (
-                        project, content, fact_type, tags, confidence, 
-                        valid_from, valid_until, source, meta, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        project,
-                        content,
-                        fact_type,
-                        tags_json,
-                        confidence,
-                        ts,
-                        valid_until,
-                        source,
-                        meta_json,
-                        ts,
-                        ts,
-                    ),
-                )
-                fact_id = cursor.lastrowid
-
-                if self._auto_embed:
-                    try:
-                        embedding = self._get_embedder().embed(content)
-                        await conn.execute(
-                            "INSERT INTO fact_embeddings (fact_id, embedding) VALUES (?, ?)",
-                            (fact_id, json.dumps(embedding)),
-                        )
-                    except Exception as e:
-                        logger.warning(f"Embedding failed for fact {fact_id}: {e}")
-
-                final_tx_id = await self._log_transaction(
-                    conn, project, "store", {"fact_id": fact_id, "fact_type": fact_type}
-                )
-                await conn.execute(
-                    "UPDATE facts SET tx_id = ? WHERE id = ?", (final_tx_id, fact_id)
-                )
-
-                await conn.commit()
-                return fact_id
-            except Exception as e:
-                await conn.rollback()
-                raise e
+    # store() and deprecate() are now provided by StoreMixin
+    # register_agent(), get_agent(), list_agents() are now provided by AgentMixin
+    # search() is now provided by SearchMixin
 
     async def recall(self, project: str, limit: Optional[int] = None) -> List[Dict[str, Any]]:
         query = f"""
@@ -153,8 +100,8 @@ class AsyncCortexEngine:
         if limit:
             query += " LIMIT ?"
             params.append(limit)
-
-        async with self._pool.acquire() as conn:
+            
+        async with self.session() as conn:
             conn.row_factory = aiosqlite.Row
             async with conn.execute(query, params) as cursor:
                 rows = await cursor.fetchall()
@@ -166,87 +113,35 @@ class AsyncCortexEngine:
                     results.append(d)
                 return results
 
-    async def search(
-        self, query: str, top_k: int = 5, project: Optional[str] = None, as_of: Optional[str] = None
-    ) -> List[Any]:
-        async with self._pool.acquire() as conn:
-            try:
-                results = await semantic_search(
-                    conn, self._get_embedder().embed(query), top_k, project, as_of
-                )
-                if results:
-                    return results
-            except Exception as e:
-                logger.warning(f"Semantic search failed: {e}")
-
-            return await text_search(conn, query, project, limit=top_k)
-
     async def get_fact(self, fact_id: int) -> Optional[Dict[str, Any]]:
-        async with self._pool.acquire() as conn:
+        async with self.session() as conn:
             conn.row_factory = aiosqlite.Row
-            async with conn.execute(
-                f"SELECT {self.FACT_COLUMNS} {self.FACT_JOIN} WHERE f.id = ?", (fact_id,)
-            ) as cursor:
+            async with conn.execute(f"SELECT {self.FACT_COLUMNS} {self.FACT_JOIN} WHERE f.id = ?", (fact_id,)) as cursor:
                 row = await cursor.fetchone()
-                if not row:
-                    return None
+                if not row: return None
                 d = dict(row)
                 d["tags"] = json.loads(d["tags"]) if d.get("tags") else []
                 d["meta"] = json.loads(d["meta"]) if d.get("meta") else {}
                 return d
 
-    async def retrieve(self, fact_id: int) -> Dict[str, Any]:
-        """Alias for get_fact to match test expectations."""
-        fact = await self.get_fact(fact_id)
-        if not fact:
-            from cortex.exceptions import FactNotFound
-            raise FactNotFound(f"Fact {fact_id} not found")
-        return fact
-
-    async def delete_fact(self, fact_id: int) -> bool:
-        """Hard delete a fact (for tests/admin mostly)."""
-        async with self._pool.acquire() as conn:
-            await conn.execute("BEGIN IMMEDIATE")
-            try:
-                cursor = await conn.execute("DELETE FROM facts WHERE id = ?", (fact_id,))
-                await conn.commit()
-                return cursor.rowcount > 0
-            except Exception:
-                await conn.rollback()
-                raise
-
-    async def vote(
-        self,
-        fact_id: int,
-        agent: str,
-        value: int,
-        agent_id: Optional[str] = None,
-        signature: Optional[str] = None,
-    ) -> float:
+    async def vote(self, fact_id: int, agent: str, value: int, agent_id: Optional[str] = None, signature: Optional[str] = None) -> float:
         """Vote with immutable ledger logging and reputation-weighted consensus."""
         if value not in (-1, 0, 1):
-            raise ValueError("Vote must be -1, 0, or 1")
-
-        async with self._pool.acquire() as conn:
+             raise ValueError("Vote must be -1, 0, or 1")
+             
+        async with self.session() as conn:
             await conn.execute("BEGIN IMMEDIATE")
             try:
                 # 1. Resolve agent_id
                 target_agent_id = agent_id or agent
-
-                async with conn.execute(
-                    "SELECT reputation_score FROM agents WHERE id = ?", (target_agent_id,)
-                ) as cursor:
+                
+                async with conn.execute("SELECT reputation_score FROM agents WHERE id = ?", (target_agent_id,)) as cursor:
                     row = await cursor.fetchone()
                     if not row:
                         if target_agent_id in ("human", "api_agent", "system"):
                             await conn.execute(
                                 "INSERT INTO agents (id, name, agent_type, reputation_score) VALUES (?, ?, ?, ?)",
-                                (
-                                    target_agent_id,
-                                    target_agent_id.capitalize(),
-                                    "system" if target_agent_id != "human" else "human",
-                                    1.0 if target_agent_id == "human" else 0.5,
-                                ),
+                                (target_agent_id, target_agent_id.capitalize(), "system" if target_agent_id != "human" else "human", 1.0 if target_agent_id == "human" else 0.5)
                             )
                             rep = 1.0 if target_agent_id == "human" else 0.5
                         else:
@@ -257,88 +152,54 @@ class AsyncCortexEngine:
 
                 # 2. Append to Immutable Vote Ledger
                 ledger = ImmutableVoteLedger(conn)
-
+                
                 # Record in consensus table for fast score calculation
                 if value == 0:
-                    await conn.execute(
-                        "DELETE FROM consensus_votes_v2 WHERE fact_id = ? AND agent_id = ?",
-                        (fact_id, target_agent_id),
-                    )
+                     await conn.execute("DELETE FROM consensus_votes_v2 WHERE fact_id = ? AND agent_id = ?", (fact_id, target_agent_id))
                 else:
-                    await conn.execute(
-                        "INSERT OR REPLACE INTO consensus_votes_v2 (fact_id, agent_id, vote, vote_weight, agent_rep_at_vote) VALUES (?, ?, ?, ?, ?)",
-                        (fact_id, target_agent_id, value, rep, rep),
-                    )
-
+                     await conn.execute(
+                         "INSERT OR REPLACE INTO consensus_votes_v2 (fact_id, agent_id, vote, vote_weight, agent_rep_at_vote) VALUES (?, ?, ?, ?, ?)",
+                         (fact_id, target_agent_id, value, rep, rep)
+                     )
+                
                 # Log transaction
-                tx_id = await self._log_transaction(
-                    conn,
-                    "consensus",
-                    "vote_v2",
-                    {"fact_id": fact_id, "agent_id": target_agent_id, "vote": value},
-                )
-
+                tx_id = await self._log_transaction(conn, "consensus", "vote_v2", {"fact_id": fact_id, "agent_id": target_agent_id, "vote": value})
+                
                 # Record in permanent immutable ledger
                 await ledger.append_vote(fact_id, target_agent_id, value, rep, signature, tx_id)
-
+                
                 # Recalculate score
                 async with conn.execute(
                     "SELECT v.vote, v.vote_weight, a.reputation_score "
                     "FROM consensus_votes_v2 v "
                     "JOIN agents a ON v.agent_id = a.id "
                     "WHERE v.fact_id = ? AND a.is_active = 1",
-                    (fact_id,),
+                    (fact_id,)
                 ) as cursor:
                     votes = await cursor.fetchall()
-
+                
                 if not votes:
                     score = 1.0
                 else:
                     weighted_sum = sum(v[0] * max(v[1], v[2]) for v in votes)
                     total_weight = sum(max(v[1], v[2]) for v in votes)
                     score = 1.0 + (weighted_sum / total_weight) if total_weight > 0 else 1.0
-
+                
                 # Update fact
                 conf = "verified" if score >= 1.5 else ("disputed" if score <= 0.5 else "stated")
                 await conn.execute(
                     "UPDATE facts SET consensus_score = ?, confidence = ? WHERE id = ?",
-                    (score, conf, fact_id),
+                    (score, conf, fact_id)
                 )
-
+                
                 await conn.commit()
                 return score
             except Exception as e:
                 await conn.rollback()
                 raise e
 
-    async def deprecate(self, fact_id: int, project: str, reason: Optional[str] = None) -> bool:
-        ts = now_iso()
-        async with self._pool.acquire() as conn:
-            await conn.execute("BEGIN IMMEDIATE")
-            try:
-                cursor = await conn.execute(
-                    "UPDATE facts SET valid_until = ?, updated_at = ? WHERE id = ? AND project = ? AND valid_until IS NULL",
-                    (ts, ts, fact_id, project),
-                )
-                if cursor.rowcount == 0:
-                    await conn.rollback()
-                    return False
-
-                await self._log_transaction(
-                    conn, project, "deprecate", {"fact_id": fact_id, "reason": reason}
-                )
-                await conn.execute(
-                    "INSERT INTO graph_outbox (fact_id, action, status) VALUES (?, ?, ?)",
-                    (fact_id, "deprecate_fact", "pending"),
-                )
-                await conn.commit()
-                return True
-            except Exception as e:
-                await conn.rollback()
-                raise e
-
     async def get_votes(self, fact_id: int) -> List[Dict[str, Any]]:
-        async with self._pool.acquire() as conn:
+        async with self.session() as conn:
             conn.row_factory = aiosqlite.Row
             v2_query = """SELECT 'v2' as type, v.vote, v.agent_id as agent, v.created_at, a.reputation_score
                           FROM consensus_votes_v2 v
@@ -355,22 +216,18 @@ class AsyncCortexEngine:
             return results
 
     async def stats(self) -> Dict[str, Any]:
-        async with self._pool.acquire() as conn:
+        async with self.session() as conn:
             async with conn.execute("SELECT COUNT(*) FROM facts") as cursor:
                 total = (await cursor.fetchone())[0]
-            async with conn.execute(
-                "SELECT COUNT(*) FROM facts WHERE valid_until IS NULL"
-            ) as cursor:
+            async with conn.execute("SELECT COUNT(*) FROM facts WHERE valid_until IS NULL") as cursor:
                 active = (await cursor.fetchone())[0]
-            async with conn.execute(
-                "SELECT DISTINCT project FROM facts WHERE valid_until IS NULL"
-            ) as cursor:
+            async with conn.execute("SELECT DISTINCT project FROM facts WHERE valid_until IS NULL") as cursor:
                 projects = [p[0] for p in await cursor.fetchall()]
             async with conn.execute("SELECT COUNT(*) FROM transactions") as cursor:
                 tx_count = (await cursor.fetchone())[0]
-
+            
             db_size = self._db_path.stat().st_size / (1024 * 1024) if self._db_path.exists() else 0
-
+            
             try:
                 async with conn.execute("SELECT COUNT(*) FROM fact_embeddings") as cursor:
                     embeddings = (await cursor.fetchone())[0]
@@ -389,43 +246,6 @@ class AsyncCortexEngine:
                 "db_size_mb": round(db_size, 2),
             }
 
-    async def register_agent(
-        self, name: str, agent_type: str = "ai", public_key: str = "", tenant_id: str = "default"
-    ) -> str:
-        agent_id = str(uuid.uuid4())
-        async with self._pool.acquire() as conn:
-            await conn.execute("BEGIN IMMEDIATE")
-            try:
-                await conn.execute(
-                    "INSERT INTO agents (id, name, agent_type, public_key, tenant_id) VALUES (?, ?, ?, ?, ?)",
-                    (agent_id, name, agent_type, public_key, tenant_id),
-                )
-                await conn.commit()
-                return agent_id
-            except Exception as e:
-                await conn.rollback()
-                raise e
-
-    async def get_agent(self, agent_id: str) -> Optional[Dict[str, Any]]:
-        async with self._pool.acquire() as conn:
-            conn.row_factory = aiosqlite.Row
-            async with conn.execute(
-                "SELECT id, name, agent_type, reputation_score, created_at FROM agents WHERE id = ?",
-                (agent_id,),
-            ) as cursor:
-                row = await cursor.fetchone()
-                return dict(row) if row else None
-
-    async def list_agents(self, tenant_id: str) -> List[Dict[str, Any]]:
-        async with self._pool.acquire() as conn:
-            conn.row_factory = aiosqlite.Row
-            async with conn.execute(
-                "SELECT id, name, agent_type, reputation_score, created_at FROM agents WHERE tenant_id = ?",
-                (tenant_id,),
-            ) as cursor:
-                rows = await cursor.fetchall()
-                return [dict(r) for r in rows]
-
     async def verify_ledger(self) -> Dict[str, Any]:
         return await self._get_ledger().verify_integrity_async()
 
@@ -433,17 +253,17 @@ class AsyncCortexEngine:
         return await self._get_ledger().create_checkpoint_async()
 
     async def verify_vote_ledger(self) -> Dict[str, Any]:
-        async with self._pool.acquire() as conn:
+        async with self.session() as conn:
             ledger = ImmutableVoteLedger(conn)
             return await ledger.verify_chain_integrity()
 
     async def get_graph(self, project: Optional[str] = None, limit: int = 50) -> Dict[str, Any]:
-        async with self._pool.acquire() as conn:
+        async with self.session() as conn:
             return await _get_graph(conn, project, limit)
 
     async def health_check(self) -> bool:
         try:
-            async with self._pool.acquire() as conn:
+            async with self.session() as conn:
                 async with conn.execute("SELECT 1") as cursor:
                     await cursor.fetchone()
             return True

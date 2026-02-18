@@ -48,7 +48,9 @@ async def pool(temp_db_path):
 
 @pytest.fixture
 async def engine(pool, temp_db_path):
-    return AsyncCortexEngine(pool, temp_db_path, auto_embed=False)
+    e = AsyncCortexEngine(pool, temp_db_path)
+    e._auto_embed = False  # Disable embeddings for tests
+    return e
 
 
 @pytest.mark.asyncio

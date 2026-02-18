@@ -15,6 +15,8 @@ from cortex.engine.ledger import ImmutableLedger
 @pytest.fixture
 async def ledger(tmp_path):
     """Create a temporary ledger wired to an in-memory DB."""
+    from contextlib import asynccontextmanager
+
     db_path = str(tmp_path / "test_adaptive.db")
     conn = await aiosqlite.connect(db_path)
     conn.row_factory = aiosqlite.Row
@@ -41,7 +43,14 @@ async def ledger(tmp_path):
     """)
     await conn.commit()
 
-    ledger = ImmutableLedger(conn)
+    # Mock pool that wraps the raw connection for ImmutableLedger's pool.acquire()
+    class _MockPool:
+        @asynccontextmanager
+        async def acquire(self):
+            yield conn
+
+    ledger = ImmutableLedger(_MockPool())
+    ledger._conn = conn  # Expose for tests that need direct DB access
     yield ledger
     await conn.close()
 
@@ -103,11 +112,11 @@ class TestCheckpointWithAdaptiveBatch:
         """Checkpoint should not be created when pending < adaptive_batch_size."""
         # Insert 50 transactions (below both MIN and MAX thresholds)
         for i in range(50):
-            await ledger.conn.execute(
+            await ledger._conn.execute(
                 "INSERT INTO transactions (hash, prev_hash, project, content) VALUES (?, ?, ?, ?)",
                 (f"hash_{i}", f"hash_{i - 1}" if i > 0 else None, "test", f"content_{i}"),
             )
-        await ledger.conn.commit()
+        await ledger._conn.commit()
 
         result = await ledger.create_checkpoint_async()
         assert result is None
@@ -123,11 +132,11 @@ class TestCheckpointWithAdaptiveBatch:
 
         # Insert exactly CHECKPOINT_MIN transactions
         for i in range(CHECKPOINT_MIN):
-            await ledger.conn.execute(
+            await ledger._conn.execute(
                 "INSERT INTO transactions (hash, prev_hash, project, content) VALUES (?, ?, ?, ?)",
                 (f"hash_{i}", f"hash_{i - 1}" if i > 0 else None, "test", f"content_{i}"),
             )
-        await ledger.conn.commit()
+        await ledger._conn.commit()
 
         result = await ledger.create_checkpoint_async()
         assert result is not None  # Checkpoint ID

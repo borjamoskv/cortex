@@ -11,6 +11,9 @@
 
 ## Why CORTEX?
 
+> **"You don't need to scale people. You need to scale context."**
+> — [Read the Manifesto](MANIFESTO.md)
+
 Most AI memory solutions are either:
 1. **Cloud SaaS** (Pinecone, Mem0) — You lose data sovereignty and privacy.
 2. **Simple Vector DBs** (Chroma, FAISS) — No history, no time-travel, no cryptographic proof.

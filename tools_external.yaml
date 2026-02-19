@@ -87,7 +87,135 @@
 #     project: your-gcp-project
 #     dataset: your_dataset
 
-# ─── Toolsets ─────────────────────────────────────────────────────────
+# ─── Spanner Graph (Relational Analysis) ─────────────────────────
+# Third pillar: ADK (reasoning) → Toolbox (execution) → Spanner Graph (analysis)
+# Predefined graph queries — NEVER LLM-generated, injection-proof.
+#
+# sources:
+#   spanner-graph:
+#     kind: spanner
+#     project: your-gcp-project
+#     instance: your-instance
+#     database: financial-graph
+#
+# tools:
+#   get-indirect-transfers:
+#     kind: spanner-sql
+#     source: spanner-graph
+#     description: >
+#       Find multi-hop transfer paths between accounts for fraud detection.
+#       Traces money through intermediary accounts (up to N hops).
+#     parameters:
+#       - name: source_account
+#         type: string
+#         description: Source account ID to trace transfers from
+#       - name: max_hops
+#         type: integer
+#         description: Maximum intermediary hops (2-6, default 3)
+#     statement: >
+#       GRAPH FinancialGraph
+#       MATCH path = (a:Account)-[:TRANSFER]->{1,@max_hops}(b:Account)
+#       WHERE a.id = @source_account
+#       RETURN path
+#
+#   get-account-network:
+#     kind: spanner-sql
+#     source: spanner-graph
+#     description: >
+#       Get the full network of accounts connected to a suspect account.
+#       Returns all directly and indirectly connected accounts.
+#     parameters:
+#       - name: account_id
+#         type: string
+#         description: Account ID to investigate
+#     statement: >
+#       GRAPH FinancialGraph
+#       MATCH (a:Account)-[:TRANSFER*1..4]-(b:Account)
+#       WHERE a.id = @account_id
+#       RETURN DISTINCT b.id AS connected_account,
+#              b.owner AS owner,
+#              b.status AS status
+
+# ─── Neo4j (Knowledge Graph — CORTEX Pattern) ────────────────────
+# Same multi-hop pattern as Spanner Graph but for CORTEX knowledge:
+# get_indirect_transfers ≡ get_ghost_chain
+#
+# sources:
+#   neo4j-cortex:
+#     kind: neo4j
+#     uri: bolt://localhost:7687
+#     database: cortex
+#     user: neo4j
+#     password: ${NEO4J_PASSWORD}
+#
+# tools:
+#   get-ghost-chain:
+#     kind: neo4j-cypher
+#     source: neo4j-cortex
+#     description: >
+#       Trace dependency chains between ghosts across projects.
+#       Finds blocking relationships: Ghost A blocks Ghost B blocks Ghost C.
+#     parameters:
+#       - name: project
+#         type: string
+#         description: Starting project to trace ghost chains from
+#       - name: depth
+#         type: integer
+#         description: Maximum chain depth (1-5, default 3)
+#     statement: >
+#       MATCH path = (g1:Ghost {project: $project})-[:BLOCKS*1..$depth]->(g2:Ghost)
+#       RETURN path, length(path) AS chain_length
+#       ORDER BY chain_length DESC
+#       LIMIT 20
+#
+#   get-decision-dependencies:
+#     kind: neo4j-cypher
+#     source: neo4j-cortex
+#     description: >
+#       Find cross-project decision dependencies.
+#       Traces which decisions in project A influenced decisions in project B.
+#     parameters:
+#       - name: source_project
+#         type: string
+#         description: Source project
+#       - name: target_project
+#         type: string
+#         description: Target project
+#     statement: >
+#       MATCH path = (d1:Decision {project: $source_project})
+#                    -[:INFLUENCED*1..3]->
+#                    (d2:Decision {project: $target_project})
+#       RETURN d1.content AS source_decision,
+#              d2.content AS target_decision,
+#              length(path) AS influence_depth
+#       ORDER BY influence_depth ASC
+#
+#   get-error-patterns:
+#     kind: neo4j-cypher
+#     source: neo4j-cortex
+#     description: >
+#       Find recurring error patterns across projects.
+#       Identifies errors that share root causes or symptoms.
+#     parameters:
+#       - name: min_occurrences
+#         type: integer
+#         description: Minimum occurrence count to surface (default 2)
+#     statement: >
+#       MATCH (e1:Error)-[:SAME_ROOT_CAUSE]->(e2:Error)
+#       WITH e1.root_cause AS cause, collect(e1) + collect(e2) AS errors
+#       WHERE size(errors) >= $min_occurrences
+#       RETURN cause,
+#              size(errors) AS occurrence_count,
+#              [e IN errors | e.project] AS affected_projects
+
+# ─── Toolsets ─────────────────────────────────────────────────────
 # toolsets:
 #   sap-readonly:
 #     - sap-query-orders
+#   fraud-detection:
+#     - get-indirect-transfers
+#     - get-account-network
+#   cortex-graph:
+#     - get-ghost-chain
+#     - get-decision-dependencies
+#     - get-error-patterns

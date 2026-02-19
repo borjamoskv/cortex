@@ -90,6 +90,65 @@ tools:
       AND deprecated_at IS NULL
       ORDER BY created_at DESC
 
+  get-ghost-chain:
+    kind: sqlite-sql
+    source: cortex-sqlite
+    description: >
+      Trace ghost dependency chains across projects.
+      Finds ghosts in a project and related ghosts in other projects
+      via content similarity (shared keywords). Simulates multi-hop
+      graph traversal using SQLite until Neo4j is configured.
+    parameters:
+      - name: project
+        type: string
+        description: Starting project to trace ghost chains from
+    statement: >
+      WITH project_ghosts AS (
+        SELECT id, project, content, created_at
+        FROM facts
+        WHERE fact_type = 'ghost'
+        AND project = ?
+        AND deprecated_at IS NULL
+      ),
+      related_ghosts AS (
+        SELECT f.id, f.project, f.content, f.created_at,
+               pg.id AS source_ghost_id
+        FROM facts f
+        JOIN project_ghosts pg
+          ON f.project != pg.project
+          AND f.fact_type = 'ghost'
+          AND f.deprecated_at IS NULL
+          AND (
+            f.content LIKE '%' || pg.project || '%'
+            OR pg.content LIKE '%' || f.project || '%'
+          )
+      )
+      SELECT 'source' AS role, id, project, content, created_at, NULL AS linked_from
+      FROM project_ghosts
+      UNION ALL
+      SELECT 'related' AS role, id, project, content, created_at, source_ghost_id AS linked_from
+      FROM related_ghosts
+      ORDER BY role, created_at DESC
+
+  get-cross-project-decisions:
+    kind: sqlite-sql
+    source: cortex-sqlite
+    description: >
+      Find decisions that reference other projects, revealing
+      cross-project dependencies and architectural bridges.
+    parameters: []
+    statement: >
+      SELECT f1.id, f1.project, f1.content, f1.created_at,
+             f2.project AS referenced_project
+      FROM facts f1
+      JOIN (SELECT DISTINCT project FROM facts WHERE deprecated_at IS NULL) f2
+        ON f1.content LIKE '%' || f2.project || '%'
+        AND f1.project != f2.project
+      WHERE f1.fact_type = 'decision'
+      AND f1.deprecated_at IS NULL
+      ORDER BY f1.created_at DESC
+      LIMIT 50
+
 toolsets:
   cortex-readonly:
     - search-facts
@@ -97,3 +156,6 @@ toolsets:
     - list-projects
     - get-recent-facts
     - get-ghosts
+  cortex-graph:
+    - get-ghost-chain
+    - get-cross-project-decisions

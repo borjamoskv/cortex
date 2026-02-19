@@ -1,3 +1,15 @@
+# Security — NEVER commit these
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+token.json
+credentials.json
+**/secrets/
+service-account*.json
+
 # Python
 __pycache__/
 *.pyc

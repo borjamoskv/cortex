@@ -1,0 +1,112 @@
+{
+  "info": {
+    "name": "CORTEX API",
+    "description": "Sovereign Memory Engine for Enterprise AI Swarms",
+    "version": "4.3.0",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "apikey",
+    "apikey": [
+      { "key": "key", "value": "X-API-Key", "type": "string" },
+      { "key": "value", "value": "{{api_key}}", "type": "string" },
+      { "key": "in", "value": "header", "type": "string" }
+    ]
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8000" },
+    { "key": "api_key", "value": "your-api-key" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": { "method": "GET", "url": "{{base_url}}/health" }
+        },
+        {
+          "name": "Metrics",
+          "request": { "method": "GET", "url": "{{base_url}}/metrics" }
+        }
+      ]
+    },
+    {
+      "name": "Facts",
+      "item": [
+        {
+          "name": "Store Fact",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/v1/facts",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"CORTEX is a Sovereign Memory Engine.\",\n  \"type\": \"knowledge\",\n  \"project\": \"demo\",\n  \"tags\": [\"cortex\", \"memory\"]\n}"
+            }
+          }
+        },
+        {
+          "name": "Get Fact by ID",
+          "request": { "method": "GET", "url": "{{base_url}}/v1/facts/1" }
+        },
+        {
+          "name": "Delete Fact",
+          "request": { "method": "DELETE", "url": "{{base_url}}/v1/facts/1" }
+        },
+        {
+          "name": "List Facts",
+          "request": { "method": "GET", "url": "{{base_url}}/v1/facts?project=demo&limit=20" }
+        }
+      ]
+    },
+    {
+      "name": "Search",
+      "item": [
+        {
+          "name": "Semantic Search",
+          "request": { "method": "GET", "url": "{{base_url}}/v1/search?q=sovereign+memory&top_k=5" }
+        }
+      ]
+    },
+    {
+      "name": "Ask (RAG)",
+      "item": [
+        {
+          "name": "Ask Question",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/v1/ask",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"What is CORTEX?\",\n  \"k\": 5,\n  \"temperature\": 0.3\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "List Projects",
+          "request": { "method": "GET", "url": "{{base_url}}/v1/projects" }
+        },
+        {
+          "name": "Export Project",
+          "request": { "method": "GET", "url": "{{base_url}}/v1/projects/demo/export" }
+        }
+      ]
+    },
+    {
+      "name": "LLM",
+      "item": [
+        {
+          "name": "LLM Status",
+          "request": { "method": "GET", "url": "{{base_url}}/v1/llm/status" }
+        }
+      ]
+    }
+  ]
+}

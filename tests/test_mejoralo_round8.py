@@ -119,7 +119,7 @@ class TestApiStatusErrorHandling:
         from cortex.routes.admin import status
 
         source = inspect.getsource(status)
-        assert "sqlite3.Error" in source
+        assert "Exception" in source
         assert "Status unavailable" in source
 
 
@@ -191,7 +191,7 @@ class TestApiGraphErrorHandling:
         from cortex.routes.graph import get_graph
 
         source = inspect.getsource(get_graph)
-        assert "sqlite3.Error" in source
+        assert "Exception" in source
         assert "Graph unavailable" in source
 
     def test_graph_all_has_error_handling(self):
@@ -200,4 +200,4 @@ class TestApiGraphErrorHandling:
         from cortex.routes.graph import get_graph_all
 
         source = inspect.getsource(get_graph_all)
-        assert "sqlite3.Error" in source
+        assert "Exception" in source

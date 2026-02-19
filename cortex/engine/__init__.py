@@ -144,6 +144,12 @@ class CortexEngine(SyncCompatMixin):
     async def history(self, *args, **kwargs):
         return await self.facts.history(*args, **kwargs)
 
+    async def get_context_subgraph(self, *args, **kwargs):
+        return await self.facts.get_context_subgraph(*args, **kwargs)
+
+    async def find_path(self, *args, **kwargs):
+        return await self.facts.find_path(*args, **kwargs)
+
     async def vote(self, *args, **kwargs):
         return await self.consensus.vote(*args, **kwargs)
 

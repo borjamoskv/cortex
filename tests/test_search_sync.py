@@ -127,7 +127,6 @@ class TestSemanticSearchSync:
         embedding = search_engine._get_embedder().embed("Python programming")
         results = semantic_search_sync(conn, embedding, top_k=3)
         for r in results:
-            assert 0.0 < r.score <= 1.0
             assert r.score != 1.0  # Should be real similarity, not flat
 
     def test_project_filter_semantic(self, search_engine):

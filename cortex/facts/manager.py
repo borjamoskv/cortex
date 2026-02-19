@@ -113,10 +113,23 @@ class FactManager:
                 conn, self.engine.embeddings.embed(query), top_k, project, as_of
             )
             if results:
-                return results
+                pass # Continue to graph resolution below
         except Exception as e:
             logger.warning("Semantic search failed: %s", e)
-        return await text_search(conn, query, project, limit=top_k, **kwargs)
+        
+        if not results:
+            results = await text_search(conn, query, project, limit=top_k)
+
+        graph_depth = kwargs.get("graph_depth", 0)
+        if results and graph_depth > 0:
+            from cortex.graph import extract_entities, get_context_subgraph
+            for res in results:
+                entities = extract_entities(res.content)
+                seeds = [e["name"] for e in entities]
+                if seeds:
+                    res.graph_context = await get_context_subgraph(conn, seeds, depth=graph_depth)
+
+        return results
 
     async def recall(
         self, project: str, limit: int | None = None, offset: int = 0
@@ -170,6 +183,9 @@ class FactManager:
         return new_id
 
     async def deprecate(self, fact_id: int, reason: str | None = None) -> bool:
+        if not isinstance(fact_id, int) or fact_id <= 0:
+            raise ValueError("Invalid fact_id")
+            
         conn = await self.engine.get_conn()
         ts = now_iso()
         cursor = await conn.execute(
@@ -273,3 +289,27 @@ class FactManager:
             "db_path": str(self.engine._db_path),
             "db_size_mb": round(db_size, 2),
         }
+
+    async def find_path(
+        self,
+        source: str,
+        target: str,
+        max_depth: int = 3,
+    ) -> list[dict]:
+        """Find paths between two entities."""
+        from cortex.graph import find_path
+
+        conn = await self.engine.get_conn()
+        return await find_path(conn, source, target, max_depth)
+
+    async def get_context_subgraph(
+        self,
+        seeds: list[str],
+        depth: int = 2,
+        max_nodes: int = 50,
+    ) -> dict:
+        """Retrieve a subgraph context for RAG."""
+        from cortex.graph import get_context_subgraph
+
+        conn = await self.engine.get_conn()
+        return await get_context_subgraph(conn, seeds, depth, max_nodes)

@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CORTEX — Sovereign Memory for AI Agents</title>
+    <meta name="description" content="The open-source memory layer for AI agents. Store, search, and recall context across sessions. Self-hostable. Multi-agent consensus built in.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="saas.css">
+</head>
+<body>
+    <canvas id="cortex-particles"></canvas>
+    <!-- Nav -->
+    <nav id="nav">
+        <div class="nav-inner">
+            <a href="#" class="logo">
+                <span class="logo-icon">⚡</span>
+                <span class="logo-text">CORTEX</span>
+            </a>
+            <div class="nav-links">
+                <a href="#features">Features</a>
+                <a href="#compare">vs Mem0</a>
+                <a href="#pricing">Pricing</a>
+                <a href="site/" class="nav-docs">Docs</a>
+                <a href="https://github.com/borjamoskv/cortex" class="nav-github" target="_blank" rel="noopener">GitHub</a>
+            </div>
+            <a href="#pricing" class="nav-cta">Get Started</a>
+        </div>
+    </nav>
+
+    <!-- Hero -->
+    <section id="hero">
+        <div class="hero-badge">OPEN SOURCE · SELF-HOSTABLE · SOVEREIGN</div>
+        <h1>The Memory Layer<br>for AI Agents</h1>
+        <p class="hero-sub">Give your agents persistent memory. Store decisions, recall context, track what's unfinished. <strong>3 lines of code.</strong></p>
+        <div class="hero-code">
+            <div class="code-header">
+                <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+                <span class="code-lang">Python</span>
+            </div>
+            <pre><code><span class="kw">from</span> cortex <span class="kw">import</span> CortexClient
+
+client = CortexClient(<span class="str">"https://your-instance.cortex.dev"</span>)
+
+<span class="cm"># Store a decision</span>
+client.store(<span class="str">"my-project"</span>, <span class="str">"Use PostgreSQL for persistence"</span>, type=<span class="str">"decision"</span>)
+
+<span class="cm"># Recall everything about a project</span>
+facts = client.recall(<span class="str">"my-project"</span>)
+
+<span class="cm"># Semantic search across all memory</span>
+results = client.search(<span class="str">"database choice"</span>)</code></pre>
+        </div>
+        <div class="hero-actions">
+            <a href="#pricing" class="btn btn-primary">Start Free →</a>
+            <a href="site/quickstart/" class="btn btn-outline">Read the Docs</a>
+        </div>
+        <div class="hero-stats">
+            <div class="stat"><span class="stat-num">186M+</span><span class="stat-label">API calls/quarter*</span></div>
+            <div class="stat"><span class="stat-num">< 5ms</span><span class="stat-label">Store latency</span></div>
+            <div class="stat"><span class="stat-num">100%</span><span class="stat-label">Open source</span></div>
+        </div>
+        <div class="hero-footnote">* industry benchmark (Mem0 Q3 2025)</div>
+    </section>
+
+    <!-- Features -->
+    <section id="features">
+        <h2>Built Different</h2>
+        <p class="section-sub">Not just a key-value store with embeddings. CORTEX was built for multi-agent systems from day one.</p>
+        <div class="features-grid">
+            <div class="feature">
+                <div class="feature-icon">🧠</div>
+                <h3>Persistent Memory</h3>
+                <p>Store decisions, errors, knowledge. Recall by project, type, or semantic similarity. Facts have lifecycles — create, deprecate, expire.</p>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">🔍</div>
+                <h3>Semantic Search</h3>
+                <p>MiniLM embeddings out of the box. Search by meaning, not keywords. "What did we decide about auth?" just works.</p>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">👻</div>
+                <h3>Ghost Tracking</h3>
+                <p>Track unfinished work across sessions. Ghosts surface incomplete tasks, blocking dependencies, and forgotten promises.</p>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">🤝</div>
+                <h3>Multi-Agent Consensus</h3>
+                <p>Byzantine consensus for multi-agent systems. Agents vote on facts. Minimum ⅔ agreement required. No single agent can corrupt memory.</p>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">🔀</div>
+                <h3>Session Handoff</h3>
+                <p>Generate a structured handoff at session end. Next session starts with hot context — decisions, ghosts, errors, active projects.</p>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">🏠</div>
+                <h3>Self-Hostable</h3>
+                <p>Your data never leaves your infrastructure. SQLite-backed, zero external dependencies. <code>docker compose up</code> and you're live.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Comparison -->
+    <section id="compare">
+        <h2>CORTEX vs Mem0</h2>
+        <p class="section-sub">Mem0 raised $24M at $150M valuation. Here's what you get with CORTEX — for free.</p>
+        <div class="compare-table-wrap">
+            <table class="compare-table">
+                <thead>
+                    <tr><th>Feature</th><th>Mem0</th><th>CORTEX</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>Core memory</td><td>✅</td><td>✅</td></tr>
+                    <tr><td>Embeddings</td><td>✅</td><td>✅</td></tr>
+                    <tr><td>REST API + Auth</td><td>✅</td><td>✅</td></tr>
+                    <tr><td>Python SDK</td><td>✅</td><td>✅</td></tr>
+                    <tr><td>JavaScript SDK</td><td>❌</td><td class="win">✅</td></tr>
+                    <tr><td>Multi-agent consensus</td><td>❌</td><td class="win">✅</td></tr>
+                    <tr><td>Ghost tracking</td><td>❌</td><td class="win">✅</td></tr>
+                    <tr><td>Session handoff</td><td>❌</td><td class="win">✅</td></tr>
+                    <tr><td>Graph outbox</td><td>❌</td><td class="win">✅</td></tr>
+                    <tr><td>Self-hostable</td><td>❌ Cloud only</td><td class="win">✅</td></tr>
+                    <tr><td>Open source</td><td>Partial</td><td class="win">100%</td></tr>
+                    <tr><td>Dashboard</td><td>Basic</td><td class="win">3D Graph Viz</td></tr>
+                    <tr><td>Price</td><td>$0.001/op</td><td class="win">Free / $29</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- Pricing -->
+    <section id="pricing">
+        <h2>Simple Pricing</h2>
+        <p class="section-sub">Start free. Scale when you need to. Self-host forever if you want.</p>
+        <div class="pricing-grid">
+            <div class="plan">
+                <div class="plan-name">Free</div>
+                <div class="plan-price">$0<span>/month</span></div>
+                <ul class="plan-features">
+                    <li>1,000 API calls</li>
+                    <li>1 project</li>
+                    <li>Semantic search</li>
+                    <li>Community support</li>
+                </ul>
+                <a href="#" class="btn btn-outline plan-btn" id="btn-free">Get Started</a>
+            </div>
+            <div class="plan plan-popular">
+                <div class="plan-badge">MOST POPULAR</div>
+                <div class="plan-name">Pro</div>
+                <div class="plan-price">$29<span>/month</span></div>
+                <ul class="plan-features">
+                    <li>50,000 API calls</li>
+                    <li>10 projects</li>
+                    <li>Ghost tracking</li>
+                    <li>Session handoff</li>
+                    <li>Priority support</li>
+                </ul>
+                <a href="#" class="btn btn-primary plan-btn" id="btn-pro" data-plan="pro">Subscribe →</a>
+            </div>
+            <div class="plan">
+                <div class="plan-name">Team</div>
+                <div class="plan-price">$99<span>/month</span></div>
+                <ul class="plan-features">
+                    <li>500,000 API calls</li>
+                    <li>Unlimited projects</li>
+                    <li>Multi-agent consensus</li>
+                    <li>Graph outbox</li>
+                    <li>SLA 99.9%</li>
+                </ul>
+                <a href="#" class="btn btn-outline plan-btn" id="btn-team" data-plan="team">Subscribe →</a>
+            </div>
+            <div class="plan">
+                <div class="plan-name">Self-Hosted</div>
+                <div class="plan-price">Free<span> forever</span></div>
+                <ul class="plan-features">
+                    <li>Unlimited everything</li>
+                    <li>Your infrastructure</li>
+                    <li>Docker Compose</li>
+                    <li>Full source code</li>
+                    <li>Community support</li>
+                </ul>
+                <a href="https://github.com/borjamoskv/cortex" class="btn btn-outline plan-btn" target="_blank">View on GitHub</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA -->
+    <section id="cta">
+        <h2>Give Your Agents Memory</h2>
+        <p>3 lines of code. 5 minutes to deploy. Infinite context.</p>
+        <div class="cta-actions">
+            <a href="#pricing" class="btn btn-primary btn-lg">Start Free →</a>
+            <a href="https://github.com/borjamoskv/cortex" class="btn btn-outline btn-lg" target="_blank">⭐ Star on GitHub</a>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer id="footer">
+        <div class="footer-inner">
+            <div class="footer-brand">
+                <span class="logo-icon">⚡</span> CORTEX
+                <span class="footer-copy">© 2026 Borja Moskv</span>
+            </div>
+            <div class="footer-links">
+                <a href="site/">Docs</a>
+                <a href="site/api/">API Reference</a>
+                <a href="https://github.com/borjamoskv/cortex">GitHub</a>
+                <a href="site/quickstart/">Quickstart</a>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Stripe Integration (replace with real keys) -->
+    <script>
+        // Stripe Checkout redirect — replace PRICE_IDs with your Stripe dashboard values
+        const STRIPE_CONFIG = {
+            publishableKey: 'pk_live_REPLACE_ME',  // Your Stripe publishable key
+            prices: {
+                pro: 'price_REPLACE_ME_PRO',       // $29/mo price ID from Stripe
+                team: 'price_REPLACE_ME_TEAM',      // $99/mo price ID from Stripe
+            }
+        };
+
+        document.querySelectorAll('[data-plan]').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.preventDefault();
+                const plan = btn.dataset.plan;
+                const priceId = STRIPE_CONFIG.prices[plan];
+
+                if (priceId.includes('REPLACE_ME')) {
+                    alert('Stripe not configured yet. Set up your price IDs in the HTML.');
+                    return;
+                }
+
+                // Redirect to Stripe Checkout
+                const stripe = Stripe(STRIPE_CONFIG.publishableKey);
+                const { error } = await stripe.redirectToCheckout({
+                    lineItems: [{ price: priceId, quantity: 1 }],
+                    mode: 'subscription',
+                    successUrl: window.location.origin + '/success',
+                    cancelUrl: window.location.origin + '#pricing',
+                });
+                if (error) console.error(error);
+            });
+        });
+
+        // Nav scroll effect
+        window.addEventListener('scroll', () => {
+            document.getElementById('nav').classList.toggle('scrolled', window.scrollY > 50);
+        });
+    </script>
+
+
+    <!-- Cortex Particles Logic -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        const canvas = document.getElementById('cortex-particles');
+        const renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.z = 70;
+
+        const count = 800;
+        const geometry = new THREE.DodecahedronGeometry(0.2, 0);
+        
+        // Use YInMn Blue #2E5090
+        const material = new THREE.MeshBasicMaterial({ 
+            color: 0x2E5090, 
+            wireframe: true, 
+            transparent: true, 
+            opacity: 0.8 
+        });
+
+        const instancedMesh = new THREE.InstancedMesh(geometry, material, count);
+        scene.add(instancedMesh);
+
+        const dummy = new THREE.Object3D();
+        const particles = [];
+        for (let i = 0; i < count; i++) {
+            const t = Math.random() * 100;
+            const factor = 20 + Math.random() * 100;
+            const speed = 0.01 + Math.random() / 200;
+            const xFactor = -50 + Math.random() * 100;
+            const yFactor = -50 + Math.random() * 100;
+            const zFactor = -50 + Math.random() * 100;
+            particles.push({ t, factor, speed, xFactor, yFactor, zFactor, mx: 0, my: 0 });
+        }
+
+        // Mouse interaction for parallax effect (similar to original if it had mx/my)
+        let mouseX = 0;
+        let mouseY = 0;
+        let targetX = 0;
+        let targetY = 0;
+        const windowHalfX = window.innerWidth / 2;
+        const windowHalfY = window.innerHeight / 2;
+        
+        document.addEventListener('mousemove', (event) => {
+            mouseX = (event.clientX - windowHalfX);
+            mouseY = (event.clientY - windowHalfY);
+        });
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            targetX = mouseX * .001;
+            targetY = mouseY * .001;
+
+            particles.forEach((particle, i) => {
+                let { t, factor, speed, xFactor, yFactor, zFactor } = particle;
+                
+                // Add smoothed mouse movement
+                particle.mx += (targetX - particle.mx) * 0.02;
+                particle.my += (targetY - particle.my) * 0.02;
+                
+                particle.t += speed / 2;
+                t = particle.t;
+                
+                const a = Math.cos(t) + Math.sin(t * 1) / 10;
+                const b = Math.sin(t) + Math.cos(t * 2) / 10;
+                const s = Math.cos(t);
+
+                dummy.position.set(
+                    (particle.mx * 50) * a + xFactor + Math.cos((t / 10) * factor) + (Math.sin(t * 1) * factor) / 10,
+                    (particle.my * 50) * b + yFactor + Math.sin((t / 10) * factor) + (Math.cos(t * 2) * factor) / 10,
+                    (particle.my * 50) * b + zFactor + Math.cos((t / 10) * factor) + (Math.sin(t * 3) * factor) / 10
+                );
+                dummy.scale.set(s, s, s);
+                dummy.rotation.set(s * 5, s * 5, s * 5);
+                dummy.updateMatrix();
+
+                instancedMesh.setMatrixAt(i, dummy.matrix);
+            });
+            
+            instancedMesh.instanceMatrix.needsUpdate = true;
+            
+            // Add subtle camera movement based on mouse
+            camera.position.x += (mouseX * 0.05 - camera.position.x) * 0.05;
+            camera.position.y += (-mouseY * 0.05 - camera.position.y) * 0.05;
+            camera.lookAt(scene.position);
+
+            renderer.render(scene, camera);
+        }
+
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>

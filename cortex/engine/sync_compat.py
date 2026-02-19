@@ -129,6 +129,7 @@ class SyncCompatMixin:
             from cortex.graph import process_fact_graph_sync
 
             process_fact_graph_sync(conn, fact_id, content, project, ts)
+            conn.commit()
         except Exception as e:
             logger.warning("Graph extraction sync failed for fact %d: %s", fact_id, e)
 

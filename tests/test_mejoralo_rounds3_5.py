@@ -21,65 +21,72 @@ import sqlite3
 # ──────────────────────────────────────────────────────────────────────
 
 
+import pytest
+import pytest_asyncio
+
 class TestSearchDefensiveJson:
     """Test that search functions handle malformed JSON gracefully."""
 
-    def setup_method(self):
+    @pytest_asyncio.fixture(autouse=True)
+    async def _setup(self):
         from cortex.engine import CortexEngine
 
-        self.engine = CortexEngine(db_path=":memory:")
-        self.engine.init_db()
-        self.conn = self.engine.get_connection()
+        self.engine = CortexEngine(db_path=":memory:", auto_embed=False)
+        await self.engine.init_db()
+        self.conn = await self.engine.get_connection()
+        yield
+        await self.engine.close()
 
-    def teardown_method(self):
-        self.engine.close()
-
-    def _insert_fact_with_bad_json(self, content: str, bad_tags: str, bad_meta: str):
+    async def _insert_fact_with_bad_json(self, content: str, bad_tags: str, bad_meta: str):
         """Insert a fact with malformed JSON fields directly into DB."""
-        self.conn.execute(
+        await self.conn.execute(
             """INSERT INTO facts (project, content, fact_type, tags, confidence,
                valid_from, valid_until, source, meta, created_at, updated_at)
                VALUES (?, ?, 'knowledge', ?, 'stated',
                datetime('now'), NULL, 'test', ?, datetime('now'), datetime('now'))""",
             ("test-project", content, bad_tags, bad_meta),
         )
-        self.conn.commit()
+        await self.conn.commit()
 
-    def test_text_search_with_malformed_tags(self):
+    @pytest.mark.asyncio
+    async def test_text_search_with_malformed_tags(self):
         """text_search should return results even with broken JSON in tags."""
         from cortex.search import text_search
 
-        self._insert_fact_with_bad_json("important finding", "NOT_JSON", "{}")
-        results = text_search(self.conn, "important")
+        await self._insert_fact_with_bad_json("important finding", "NOT_JSON", "{}")
+        results = await text_search(self.conn, "important")
         assert len(results) == 1
         assert results[0].tags == []  # Gracefully defaulted
 
-    def test_text_search_with_malformed_meta(self):
+    @pytest.mark.asyncio
+    async def test_text_search_with_malformed_meta(self):
         """text_search should return results even with broken JSON in meta."""
         from cortex.search import text_search
 
-        self._insert_fact_with_bad_json("key data", "[]", "BROKEN_META")
-        results = text_search(self.conn, "key data")
+        await self._insert_fact_with_bad_json("key data", "[]", "BROKEN_META")
+        results = await text_search(self.conn, "key data")
         assert len(results) == 1
         assert results[0].meta == {}  # Gracefully defaulted
 
-    def test_text_search_error_handling(self):
+    @pytest.mark.asyncio
+    async def test_text_search_error_handling(self):
         """text_search returns empty list on DB error, not exception."""
         from cortex.search import text_search
+        from unittest.mock import AsyncMock
+        import sqlite3
 
-        # Close connection to force an error
-        conn = sqlite3.connect(":memory:")
-        conn.close()
-        results = text_search(conn, "anything")
+        mock_conn = AsyncMock()
+        mock_conn.execute.side_effect = sqlite3.OperationalError("db error")
+        results = await text_search(mock_conn, "anything")
         assert results == []
 
     def test_text_search_limit_is_parameterized(self):
         """Ensure LIMIT is parameterized (SQL injection prevention)."""
         import inspect
 
-        from cortex.search import text_search
+        from cortex.search import text
 
-        source = inspect.getsource(text_search)
+        source = inspect.getsource(text)
         # Should NOT contain f-string LIMIT
         assert "LIMIT {limit}" not in source
         assert "LIMIT ?" in source
@@ -135,13 +142,14 @@ class TestApiValueErrorHandler:
 class TestMigrateFileReadSafety:
     """Migration file reads should handle OSError."""
 
-    def test_migrate_mistakes_oserror(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_migrate_mistakes_oserror(self, tmp_path):
         """_migrate_mistakes records error instead of crashing on OSError."""
         from cortex.engine import CortexEngine
         from cortex.migrate import _migrate_mistakes
 
         engine = CortexEngine(db_path=":memory:")
-        engine.init_db()
+        await engine.init_db()
 
         nonexistent = tmp_path / "does_not_exist.jsonl"
         stats = {"mistakes_imported": 0, "errors": []}
@@ -150,15 +158,16 @@ class TestMigrateFileReadSafety:
         assert len(stats["errors"]) == 1
         assert "Failed to read" in stats["errors"][0]
 
-        engine.close()
+        await engine.close()
 
-    def test_migrate_bridges_oserror(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_migrate_bridges_oserror(self, tmp_path):
         """_migrate_bridges records error instead of crashing on OSError."""
         from cortex.engine import CortexEngine
         from cortex.migrate import _migrate_bridges
 
         engine = CortexEngine(db_path=":memory:")
-        engine.init_db()
+        await engine.init_db()
 
         nonexistent = tmp_path / "does_not_exist.jsonl"
         stats = {"bridges_imported": 0, "errors": []}
@@ -166,7 +175,7 @@ class TestMigrateFileReadSafety:
         assert len(stats["errors"]) == 1
         assert "Failed to read" in stats["errors"][0]
 
-        engine.close()
+        await engine.close()
 
 
 # ──────────────────────────────────────────────────────────────────────

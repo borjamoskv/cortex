@@ -86,7 +86,7 @@ def list_facts(project, fact_type, limit, db) -> None:
             table.add_row(str(row[0]), row[1], row[3], content_preview, tags_str)
         console.print(table)
     finally:
-        engine.close_sync()
+        engine.close()
 
 
 @cli.command()
@@ -128,4 +128,4 @@ def edit(fact_id, new_content, db) -> None:
             f"  Write-back: {wb.files_written} archivos actualizados."
         )
     finally:
-        engine.close_sync()
+        engine.close()

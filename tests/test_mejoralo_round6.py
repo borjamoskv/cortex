@@ -114,9 +114,9 @@ class TestEditDefensiveJSON:
             0.9,
             "manual",
         )
-        engine.get_connection.return_value = conn
-        engine.deprecate.return_value = True
-        engine.store.return_value = 42
+        engine._get_sync_conn.return_value = conn
+        engine.deprecate_sync.return_value = True
+        engine.store_sync.return_value = 42
 
         with (
             patch("cortex.cli.crud.get_engine", return_value=engine),
@@ -129,9 +129,9 @@ class TestEditDefensiveJSON:
 
             runner = CliRunner()
             result = runner.invoke(cli, ["edit", "1", "new content"])
-            engine.store.assert_called_once()
+            engine.store_sync.assert_called_once()
             # tags should be None since JSON was corrupt
-            _, kwargs = engine.store.call_args
+            _, kwargs = engine.store_sync.call_args
             assert kwargs.get("tags") is None
             engine.close.assert_called_once()
 

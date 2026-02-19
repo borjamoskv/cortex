@@ -16,8 +16,9 @@ from cortex.engine.snapshots import SnapshotManager
 
 def test_wave6():
     db_path = "test_wave6.db"
-    if os.path.exists(db_path):
-        os.remove(db_path)
+    for ext in ["", "-wal", "-shm"]:
+        if os.path.exists(db_path + ext):
+            os.remove(db_path + ext)
 
     print("🚀 Initializing Test Engine...")
     engine = CortexEngine(db_path=db_path)
@@ -62,14 +63,18 @@ def test_wave6():
     ).fetchone()
     merkle_root = root_row[0] if root_row else "TEST_ROOT"
 
+    import asyncio
     sm = SnapshotManager(db_path=db_path)
-    snap = sm.create_snapshot("test_snap", latest_tx, merkle_root)
+    snap = asyncio.run(sm.create_snapshot("test_snap", latest_tx, merkle_root))
     print(f"Snapshot created: {snap.name} at {snap.path}")
 
-    snaps = sm.list_snapshots()
+    snaps = asyncio.run(sm.list_snapshots())
     print(f"Snapshots found: {[s.name for s in snaps]}")
     assert len(snaps) >= 1
     assert snaps[0].name == "test_snap"
+
+    print("🔙 Restoring Snapshot...")
+    asyncio.run(sm.restore_snapshot(snap.tx_id))
 
     print("✅ Wave 6 Verification Successful!")
     engine.close()

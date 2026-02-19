@@ -59,6 +59,8 @@ def verify_merkle_proof(leaf_hash: str, proof: list[tuple[str, str]], root_hash:
 
         current_hash = hashlib.sha256(combined.encode()).hexdigest()
 
+    return current_hash == root_hash
+
 
 class MerkleTree:
     """

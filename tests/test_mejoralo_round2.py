@@ -16,27 +16,31 @@ from cortex.sync import export_to_json, sync_memory
 # ─── Fixtures ────────────────────────────────────────────────────────
 
 
-@pytest.fixture
-def engine(tmp_path):
+import pytest_asyncio
+
+@pytest_asyncio.fixture
+async def engine(tmp_path):
     """Create a fresh engine for testing."""
     db_path = tmp_path / "test.db"
     eng = CortexEngine(db_path=db_path, auto_embed=False)
-    eng.init_db()
+    await eng.init_db()
     yield eng
-    eng.close()
+    await eng.close()
 
 
 # ─── Sync Robustness ─────────────────────────────────────────────────
 
 
-def test_engine_get_connection(tmp_path):
+@pytest.mark.asyncio
+async def test_engine_get_connection(tmp_path):
     db_path = tmp_path / "test.db"
     engine = CortexEngine(db_path)
-    conn = engine.get_connection()
-    assert isinstance(conn, sqlite3.Connection)
+    conn = await engine.get_connection()
+    import aiosqlite
+    assert isinstance(conn, aiosqlite.Connection)
     # Check it's the same connection
-    assert conn is engine.get_connection()
-    engine.close()
+    assert conn is await engine.get_connection()
+    await engine.close()
 
 
 def test_sync_narrowed_exceptions(tmp_path):
@@ -67,45 +71,53 @@ def test_export_to_json_exceptions(tmp_path):
 class TestStoreValidation:
     """Tests for store() input guards."""
 
-    def test_store_empty_project(self, engine):
+    @pytest.mark.asyncio
+    async def test_store_empty_project(self, engine):
         with pytest.raises(ValueError, match="project cannot be empty"):
-            engine.store("", "some content")
+            await engine.store("", "some content")
 
-    def test_store_whitespace_project(self, engine):
+    @pytest.mark.asyncio
+    async def test_store_whitespace_project(self, engine):
         with pytest.raises(ValueError, match="project cannot be empty"):
-            engine.store("   ", "some content")
+            await engine.store("   ", "some content")
 
-    def test_store_empty_content(self, engine):
+    @pytest.mark.asyncio
+    async def test_store_empty_content(self, engine):
         with pytest.raises(ValueError, match="content cannot be empty"):
-            engine.store("test-project", "")
+            await engine.store("test-project", "")
 
-    def test_store_whitespace_content(self, engine):
+    @pytest.mark.asyncio
+    async def test_store_whitespace_content(self, engine):
         with pytest.raises(ValueError, match="content cannot be empty"):
-            engine.store("test-project", "   ")
+            await engine.store("test-project", "   ")
 
 
 class TestSearchValidation:
     """Tests for search() input guards."""
 
-    def test_search_empty_query(self, engine):
+    @pytest.mark.asyncio
+    async def test_search_empty_query(self, engine):
         with pytest.raises(ValueError, match="query cannot be empty"):
-            engine.search("")
+            await engine.search("")
 
-    def test_search_whitespace_query(self, engine):
+    @pytest.mark.asyncio
+    async def test_search_whitespace_query(self, engine):
         with pytest.raises(ValueError, match="query cannot be empty"):
-            engine.search("   ")
+            await engine.search("   ")
 
 
 class TestDeprecateValidation:
     """Tests for deprecate() input guards."""
 
-    def test_deprecate_zero_id(self, engine):
+    @pytest.mark.asyncio
+    async def test_deprecate_zero_id(self, engine):
         with pytest.raises(ValueError, match="Invalid fact_id"):
-            engine.deprecate(0)
+            await engine.deprecate(0)
 
-    def test_deprecate_negative_id(self, engine):
+    @pytest.mark.asyncio
+    async def test_deprecate_negative_id(self, engine):
         with pytest.raises(ValueError, match="Invalid fact_id"):
-            engine.deprecate(-5)
+            await engine.deprecate(-5)
 
 
 # ─── Defensive JSON Parsing ──────────────────────────────────────────
@@ -173,12 +185,14 @@ class TestRowToFact:
 class TestCloseSafety:
     """Tests for exception-safe close()."""
 
-    def test_close_idempotent(self, engine):
+    @pytest.mark.asyncio
+    async def test_close_idempotent(self, engine):
         """Calling close() twice should not error."""
-        engine.close()
-        engine.close()  # second call should be no-op
+        await engine.close()
+        await engine.close()  # second call should be no-op
 
-    def test_close_resets_connection(self, engine):
+    @pytest.mark.asyncio
+    async def test_close_resets_connection(self, engine):
         """After close(), connection should be None."""
-        engine.close()
+        await engine.close()
         assert engine._conn is None

@@ -26,6 +26,7 @@ from cortex.metrics import MetricsMiddleware, metrics
 from cortex.routes import (
     admin as admin_router,
     agents as agents_router,
+    ask as ask_router,
     daemon as daemon_router,
     dashboard as dashboard_router,
     facts as facts_router,
@@ -240,6 +241,7 @@ async def get_metrics():
 # Include logical routers
 app.include_router(facts_router.router)
 app.include_router(search_router.router)
+app.include_router(ask_router.router)
 app.include_router(admin_router.router)
 app.include_router(timing_router.router)
 app.include_router(daemon_router.router)
@@ -251,3 +253,10 @@ app.include_router(missions_router.router)
 app.include_router(mejoralo_router.router)
 app.include_router(gate_router.router)
 app.include_router(hive_router)
+
+# Langbase integration (opt-in — only if API key is configured)
+if config.LANGBASE_API_KEY:
+    from cortex.routes import langbase as langbase_router
+
+    app.include_router(langbase_router.router)
+    logger.info("Langbase integration enabled")

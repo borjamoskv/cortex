@@ -47,3 +47,34 @@ SHARD_DIR = Path(os.environ.get("CORTEX_SHARD_DIR", str(CORTEX_DIR / "shards")))
 MCP_MAX_CONTENT_LENGTH = int(os.environ.get("CORTEX_MCP_MAX_CONTENT", "50000"))
 MCP_MAX_TAGS = int(os.environ.get("CORTEX_MCP_MAX_TAGS", "50"))
 MCP_MAX_QUERY_LENGTH = int(os.environ.get("CORTEX_MCP_MAX_QUERY", "2000"))
+
+# ─── Cloud Storage (Turso) ───────────────────────────────────────────
+# CORTEX_STORAGE: "local" (default) | "turso"
+STORAGE_MODE = os.environ.get("CORTEX_STORAGE", "local")
+TURSO_DATABASE_URL = os.environ.get("TURSO_DATABASE_URL", "")
+TURSO_AUTH_TOKEN = os.environ.get("TURSO_AUTH_TOKEN", "")
+
+# ─── Embeddings Mode ─────────────────────────────────────────────────
+# CORTEX_EMBEDDINGS: "local" (default, ONNX) | "api" (Gemini/OpenAI)
+EMBEDDINGS_MODE = os.environ.get("CORTEX_EMBEDDINGS", "local")
+EMBEDDINGS_PROVIDER = os.environ.get("CORTEX_EMBEDDINGS_PROVIDER", "gemini")
+EMBEDDINGS_DIMENSION = int(os.environ.get("CORTEX_EMBEDDINGS_DIM", "384"))
+
+# ─── LLM Provider ────────────────────────────────────────────────────
+# CORTEX_LLM_PROVIDER: "" (disabled) | "qwen" | "openrouter" | "ollama" |
+#   "openai" | "anthropic" | "gemini" | "mistral" | "deepseek" | "groq" |
+#   "together" | "fireworks" | "deepinfra" | "perplexity" | "cerebras" |
+#   "sambanova" | "xai" | "cohere" | "custom" | ... (24+ presets)
+LLM_PROVIDER = os.environ.get("CORTEX_LLM_PROVIDER", "")
+LLM_MODEL = os.environ.get("CORTEX_LLM_MODEL", "")  # Override default model
+LLM_BASE_URL = os.environ.get("CORTEX_LLM_BASE_URL", "")  # For 'custom' provider
+LLM_API_KEY = os.environ.get("CORTEX_LLM_API_KEY", "")  # For 'custom' provider
+
+# ─── Langbase Integration ────────────────────────────────────────────
+# LANGBASE_API_KEY: "" (disabled) | "lb_..." (enabled)
+LANGBASE_API_KEY = os.environ.get("LANGBASE_API_KEY", "")
+LANGBASE_BASE_URL = os.environ.get("LANGBASE_BASE_URL", "https://api.langbase.com/v1")
+
+# ─── Deployment Mode ─────────────────────────────────────────────────
+# Detected automatically: "local" | "cloud"
+DEPLOY_MODE = "cloud" if STORAGE_MODE == "turso" else "local"

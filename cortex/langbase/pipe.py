@@ -155,10 +155,10 @@ async def create_cortex_pipe(
         Created pipe details
     """
     system_prompt = (
-        "You are an AI agent powered by CORTEX sovereign memory. "
-        "When facts from CORTEX are provided in the context, use them "
-        "to ground your answers. Cite [Fact #ID] for traceability. "
-        "Be concise, precise, and sovereign."
+        "You are an AI agent powered by CORTEX, the Sovereign Memory Engine "
+        "for Enterprise AI Swarms. When facts from CORTEX are provided in the "
+        "context, use them to ground your answers with absolute precision. "
+        "Cite [Fact #ID] for traceability. Be concise, authoritative, and decisive."
     )
 
     memory = None

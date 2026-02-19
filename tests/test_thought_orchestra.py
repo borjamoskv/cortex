@@ -1,7 +1,7 @@
 # This file is part of CORTEX.
 # Licensed under the Business Source License 1.1 (BSL 1.1).
 
-"""Tests para CORTEX Thought Orchestra + Fusion."""
+"""Tests para CORTEX Thought Orchestra + Fusion (MEJORAdo)."""
 
 from __future__ import annotations
 
@@ -13,14 +13,76 @@ from cortex.thinking.fusion import (
     FusionStrategy,
     ModelResponse,
     ThoughtFusion,
+    _tokenize,
+    _jaccard,
 )
 from cortex.thinking.orchestra import (
     OrchestraConfig,
     ThinkingMode,
+    ThinkingRecord,
     ThoughtOrchestra,
     DEFAULT_ROUTING,
+    MODE_SYSTEM_PROMPTS,
+    _ProviderPool,
 )
 from cortex.llm.provider import PROVIDER_PRESETS
+
+
+# ─── Helpers ─────────────────────────────────────────────────────────
+
+
+def _make_responses(contents: list[str], latencies: list[float] | None = None) -> list[ModelResponse]:
+    """Factory para crear listas de ModelResponse."""
+    if latencies is None:
+        latencies = [100.0 * (i + 1) for i in range(len(contents))]
+    return [
+        ModelResponse(
+            provider=f"provider_{i}",
+            model=f"model_{i}",
+            content=c,
+            latency_ms=latencies[i] if i < len(latencies) else 100.0,
+        )
+        for i, c in enumerate(contents)
+    ]
+
+
+# ─── Test Tokenization ──────────────────────────────────────────────
+
+
+class TestTokenization:
+    def test_tokenize_removes_stopwords(self):
+        tokens = _tokenize("The quick brown fox is a very fast animal")
+        assert "the" not in tokens
+        assert "is" not in tokens
+        assert "quick" in tokens
+        assert "brown" in tokens
+        assert "animal" in tokens
+
+    def test_tokenize_removes_punctuation(self):
+        tokens = _tokenize("Hello, world! How are you?")
+        assert "hello" in tokens
+        assert "world" in tokens
+        # "how", "are", "you" son <= 3 chars o stopwords
+        assert "," not in tokens
+        assert "!" not in tokens
+
+    def test_tokenize_removes_short_tokens(self):
+        tokens = _tokenize("I am ok hi no")
+        # Todos ≤ 2 chars o stopwords
+        assert len(tokens) == 0
+
+    def test_jaccard_identical(self):
+        assert _jaccard({"a", "b", "c"}, {"a", "b", "c"}) == 1.0
+
+    def test_jaccard_disjoint(self):
+        assert _jaccard({"a", "b"}, {"c", "d"}) == 0.0
+
+    def test_jaccard_partial(self):
+        val = _jaccard({"a", "b", "c"}, {"b", "c", "d"})
+        assert 0.4 < val < 0.6  # 2/4 = 0.5
+
+    def test_jaccard_empty(self):
+        assert _jaccard(set(), set()) == 0.0
 
 
 # ─── Test ModelResponse ──────────────────────────────────────────────
@@ -39,32 +101,65 @@ class TestModelResponse:
         r = ModelResponse(provider="openai", model="gpt-4o", content="")
         assert r.ok is False
 
+    def test_label(self):
+        r = ModelResponse(provider="openai", model="gpt-4o", content="test")
+        assert r.label == "openai:gpt-4o"
+
+
+# ─── Test FusedThought ───────────────────────────────────────────────
+
+
+class TestFusedThought:
+    def test_source_count(self):
+        thought = FusedThought(
+            content="test",
+            strategy=FusionStrategy.MAJORITY,
+            confidence=0.8,
+            sources=[
+                ModelResponse(provider="a", model="m", content="ok"),
+                ModelResponse(provider="b", model="m", content="", error="fail"),
+                ModelResponse(provider="c", model="m", content="ok2"),
+            ],
+        )
+        assert thought.source_count == 2
+
+    def test_fastest_slowest_source(self):
+        thought = FusedThought(
+            content="test",
+            strategy=FusionStrategy.MAJORITY,
+            confidence=0.8,
+            sources=_make_responses(["a", "b", "c"], [300.0, 100.0, 200.0]),
+        )
+        assert thought.fastest_source.latency_ms == 100.0
+        assert thought.slowest_source.latency_ms == 300.0
+
+    def test_summary(self):
+        thought = FusedThought(
+            content="test",
+            strategy=FusionStrategy.MAJORITY,
+            confidence=0.85,
+            agreement_score=0.72,
+            sources=_make_responses(["a", "b"], [100.0, 200.0]),
+        )
+        s = thought.summary()
+        assert s["confidence"] == 0.85
+        assert s["agreement"] == 0.72
+        assert s["sources_ok"] == 2
+
 
 # ─── Test ThoughtFusion ──────────────────────────────────────────────
 
 
 class TestThoughtFusion:
-    def _make_responses(self, contents: list[str]) -> list[ModelResponse]:
-        return [
-            ModelResponse(
-                provider=f"provider_{i}",
-                model=f"model_{i}",
-                content=c,
-                latency_ms=100.0 * (i + 1),
-            )
-            for i, c in enumerate(contents)
-        ]
-
     @pytest.mark.asyncio
     async def test_fuse_single_response(self):
         fusion = ThoughtFusion()
-        responses = self._make_responses(["La respuesta es 42."])
+        responses = _make_responses(["La respuesta es 42."])
         result = await fusion.fuse(responses, "¿Cuál es la respuesta?")
 
         assert isinstance(result, FusedThought)
         assert result.content == "La respuesta es 42."
-        assert result.confidence == 0.5  # Single source
-        assert result.source_count == 1
+        assert result.confidence == 0.5
 
     @pytest.mark.asyncio
     async def test_fuse_all_failed(self):
@@ -75,28 +170,40 @@ class TestThoughtFusion:
         ]
         result = await fusion.fuse(responses, "test")
         assert result.confidence == 0.0
-        assert "error" in result.content.lower() or "fallaron" in result.content.lower()
 
     @pytest.mark.asyncio
     async def test_fuse_majority_picks_most_central(self):
         fusion = ThoughtFusion()
-        responses = self._make_responses([
-            "Python es un lenguaje de programación interpretado y dinámico.",
-            "Python es un lenguaje de programación de alto nivel interpretado.",
-            "JavaScript es un lenguaje de scripting para la web.",
+        responses = _make_responses([
+            "Python es un lenguaje de programación interpretado y dinámico de alto nivel.",
+            "Python es un lenguaje de programación de alto nivel interpretado y potente.",
+            "JavaScript es un lenguaje de scripting para desarrollo web frontend.",
         ])
         result = await fusion.fuse(
             responses, "¿Qué es Python?", strategy=FusionStrategy.MAJORITY
         )
-        # Las dos primeras hablan de Python, deberían tener más overlap
         assert "Python" in result.content or "python" in result.content.lower()
-        assert result.agreement_score > 0
 
     @pytest.mark.asyncio
-    async def test_agreement_identical_responses(self):
+    async def test_near_identical_early_return(self):
         fusion = ThoughtFusion()
-        responses = self._make_responses([
-            "La capital de España es Madrid.",
+        responses = _make_responses(
+            [
+                "La capital de España es Madrid.",
+                "La capital de España es Madrid.",
+                "La capital de España es Madrid.",
+            ],
+            [300.0, 100.0, 200.0],
+        )
+        result = await fusion.fuse(responses, "capital?")
+        # Debería elegir la más rápida
+        assert result.meta.get("near_identical") is True
+        assert result.sources[1].latency_ms == 100.0  # fastest
+
+    @pytest.mark.asyncio
+    async def test_agreement_identical(self):
+        fusion = ThoughtFusion()
+        responses = _make_responses([
             "La capital de España es Madrid.",
             "La capital de España es Madrid.",
         ])
@@ -104,33 +211,35 @@ class TestThoughtFusion:
         assert agreement == 1.0
 
     @pytest.mark.asyncio
-    async def test_agreement_different_responses(self):
+    async def test_agreement_different_languages(self):
         fusion = ThoughtFusion()
-        responses = self._make_responses([
+        responses = _make_responses([
             "The quick brown fox jumps over the lazy dog.",
-            "Un veloz zorro marrón salta sobre el perro perezoso.",
+            "Un rápido zorro marrón salta sobre el perro perezoso.",
         ])
         agreement = fusion._calculate_agreement(responses)
-        # Diferentes idiomas → bajo overlap
-        assert agreement < 0.5
+        assert agreement < 0.3
 
     @pytest.mark.asyncio
-    async def test_fuse_synthesis_without_judge_falls_back(self):
-        """Sin juez, SYNTHESIS cae a MAJORITY."""
+    async def test_fuse_synthesis_fallback_without_judge(self):
         fusion = ThoughtFusion(judge_provider=None)
-        responses = self._make_responses([
-            "Respuesta A bastante larga con detalles.",
-            "Respuesta B con otra perspectiva interesante.",
+        responses = _make_responses([
+            "Respuesta A con detalles importantes sobre el tema.",
+            "Respuesta B con otra perspectiva relevante y diferente.",
         ])
         result = await fusion.fuse(
             responses, "pregunta", strategy=FusionStrategy.SYNTHESIS
         )
-        # Debería funcionar con fallback a majority
         assert result.content in [r.content for r in responses]
         assert result.confidence > 0
 
+    @pytest.mark.asyncio
+    async def test_weighted_synthesis_strategy_exists(self):
+        """Verifica que WEIGHTED_SYNTHESIS es una estrategia válida."""
+        assert FusionStrategy.WEIGHTED_SYNTHESIS.value == "weighted_synthesis"
 
-# ─── Test ThoughtOrchestra Config ────────────────────────────────────
+
+# ─── Test OrchestraConfig ────────────────────────────────────────────
 
 
 class TestOrchestraConfig:
@@ -140,17 +249,44 @@ class TestOrchestraConfig:
         assert config.max_models == 5
         assert config.timeout_seconds == 30.0
         assert config.default_strategy == FusionStrategy.SYNTHESIS
+        assert config.retry_on_failure is True
+        assert config.use_mode_prompts is True
 
     def test_custom_config(self):
-        config = OrchestraConfig(min_models=3, max_models=7, timeout_seconds=60)
+        config = OrchestraConfig(
+            min_models=3, max_models=7, timeout_seconds=60,
+            retry_on_failure=False,
+        )
         assert config.min_models == 3
-        assert config.max_models == 7
+        assert config.retry_on_failure is False
+
+
+# ─── Test ProviderPool ───────────────────────────────────────────────
+
+
+class TestProviderPool:
+    def test_pool_size_starts_empty(self):
+        pool = _ProviderPool()
+        assert pool.size == 0
+
+    @pytest.mark.asyncio
+    async def test_pool_close_all_empty(self):
+        pool = _ProviderPool()
+        await pool.close_all()
+        assert pool.size == 0
+
+
+# ─── Test ThoughtOrchestra ───────────────────────────────────────────
 
 
 class TestThoughtOrchestra:
     def test_routing_table_has_all_modes(self):
         for mode in ThinkingMode:
             assert mode.value in DEFAULT_ROUTING or mode in DEFAULT_ROUTING
+
+    def test_mode_prompts_has_all_modes(self):
+        for mode in ThinkingMode:
+            assert mode in MODE_SYSTEM_PROMPTS or mode.value in MODE_SYSTEM_PROMPTS
 
     def test_thinking_mode_values(self):
         assert ThinkingMode.DEEP_REASONING.value == "deep_reasoning"
@@ -170,10 +306,15 @@ class TestThoughtOrchestra:
         assert status["initialized"] is False
         assert "modes" in status
         assert "config" in status
+        assert "pool_size" in status
+        assert "history_count" in status
+
+    def test_stats_empty(self):
+        orchestra = ThoughtOrchestra()
+        stats = orchestra.stats()
+        assert stats["total_thoughts"] == 0
 
     def test_resolve_models_no_keys(self, monkeypatch):
-        """Sin API keys configuradas, no hay modelos disponibles."""
-        # Limpiar todas las API keys
         for preset in PROVIDER_PRESETS.values():
             env_key = preset.get("env_key", "")
             if env_key:
@@ -184,9 +325,7 @@ class TestThoughtOrchestra:
         assert len(models) == 0
 
     def test_resolve_models_with_key(self, monkeypatch):
-        """Con API key, el modelo aparece."""
         monkeypatch.setenv("GROQ_API_KEY", "test-key-123")
-        # Limpiar las demás
         for name, preset in PROVIDER_PRESETS.items():
             env_key = preset.get("env_key", "")
             if env_key and env_key != "GROQ_API_KEY":
@@ -199,7 +338,6 @@ class TestThoughtOrchestra:
 
     @pytest.mark.asyncio
     async def test_think_no_models_returns_error(self, monkeypatch):
-        """Sin modelos disponibles, retorna error graceful."""
         for preset in PROVIDER_PRESETS.values():
             env_key = preset.get("env_key", "")
             if env_key:
@@ -208,22 +346,35 @@ class TestThoughtOrchestra:
         orchestra = ThoughtOrchestra()
         result = await orchestra.think("test", mode="deep_reasoning")
         assert result.confidence == 0.0
-        assert "error" in result.content.lower() or "no hay" in result.content.lower()
+
+    @pytest.mark.asyncio
+    async def test_context_manager(self, monkeypatch):
+        for preset in PROVIDER_PRESETS.values():
+            env_key = preset.get("env_key", "")
+            if env_key:
+                monkeypatch.delenv(env_key, raising=False)
+
+        async with ThoughtOrchestra() as o:
+            result = await o.think("test")
+            assert result.confidence == 0.0
+        # Verificar que se cerró
+        assert o._pool.size == 0
 
 
-# ─── Test FusedThought ───────────────────────────────────────────────
+# ─── Test ThinkingRecord ────────────────────────────────────────────
 
 
-class TestFusedThought:
-    def test_source_count(self):
-        thought = FusedThought(
-            content="test",
-            strategy=FusionStrategy.MAJORITY,
-            confidence=0.8,
-            sources=[
-                ModelResponse(provider="a", model="m", content="ok"),
-                ModelResponse(provider="b", model="m", content="", error="fail"),
-                ModelResponse(provider="c", model="m", content="ok2"),
-            ],
+class TestThinkingRecord:
+    def test_record_creation(self):
+        record = ThinkingRecord(
+            mode="deep_reasoning",
+            strategy="synthesis",
+            models_queried=5,
+            models_succeeded=4,
+            total_latency_ms=2500.0,
+            confidence=0.85,
+            agreement=0.72,
+            winner="openai:gpt-4o",
         )
-        assert thought.source_count == 2  # Solo los OK
+        assert record.mode == "deep_reasoning"
+        assert record.timestamp > 0

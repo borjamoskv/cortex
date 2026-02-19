@@ -8,7 +8,7 @@
 N modelos pensando en paralelo con fusión por consenso.
 El cerebro distribuido de CORTEX.
 
-Modos de pensamiento:
+Modos de pensamiento::
 
     DEEP_REASONING — Modelos top-tier para análisis profundo
     CODE           — Especializados en generación/análisis de código
@@ -16,13 +16,11 @@ Modos de pensamiento:
     SPEED          — Ultra-rápidos para decisiones instantáneas
     CONSENSUS      — Todos los disponibles para máxima confianza
 
-Uso básico::
+Uso::
 
-    orchestra = ThoughtOrchestra()
-    thought = await orchestra.think("¿Cuál es la raíz del bug?", mode="deep_reasoning")
-    print(thought.content)       # Respuesta fusionada
-    print(thought.confidence)    # 0.0-1.0
-    print(thought.sources)       # Respuestas individuales
+    async with ThoughtOrchestra() as orchestra:
+        thought = await orchestra.think("¿Cuál es la raíz del bug?")
+        print(thought.content, thought.confidence)
 """
 
 from __future__ import annotations
@@ -48,6 +46,7 @@ logger = logging.getLogger("cortex.thinking.orchestra")
 
 # ─── Thinking Modes ──────────────────────────────────────────────────
 
+
 class ThinkingMode(str, Enum):
     """Modos de pensamiento que determinan qué modelos participan."""
 
@@ -58,7 +57,35 @@ class ThinkingMode(str, Enum):
     CONSENSUS = "consensus"
 
 
-# Routing table: modo → lista de (provider, model) a consultar.
+# ─── Mode-specific system prompts ────────────────────────────────────
+
+MODE_SYSTEM_PROMPTS: dict[str, str] = {
+    ThinkingMode.DEEP_REASONING: (
+        "You are a world-class reasoning AI. Analyze the problem systematically. "
+        "Consider multiple angles. Show your reasoning chain. Be thorough."
+    ),
+    ThinkingMode.CODE: (
+        "You are an elite software engineer. Provide clean, production-ready code. "
+        "Consider edge cases, performance, and maintainability. Be precise."
+    ),
+    ThinkingMode.CREATIVE: (
+        "You are a brilliant creative thinker. Generate original, unexpected ideas. "
+        "Break conventions. Think laterally. Surprise with insight."
+    ),
+    ThinkingMode.SPEED: (
+        "You are a fast, accurate assistant. Give direct, concise answers. "
+        "No preamble. Get to the point immediately."
+    ),
+    ThinkingMode.CONSENSUS: (
+        "You are a careful, balanced analyst. Consider all perspectives. "
+        "Weigh evidence. Be nuanced and comprehensive."
+    ),
+}
+
+
+# ─── Routing Table ───────────────────────────────────────────────────
+
+# modo → lista de (provider, model) a consultar.
 # Solo se usarán los que tengan API key configurada.
 DEFAULT_ROUTING: dict[str, list[tuple[str, str]]] = {
     ThinkingMode.DEEP_REASONING: [
@@ -101,33 +128,95 @@ DEFAULT_ROUTING: dict[str, list[tuple[str, str]]] = {
 }
 
 
+# ─── Configuration ───────────────────────────────────────────────────
+
+
 @dataclass
 class OrchestraConfig:
     """Configuración del orchestra."""
 
-    # Nº mínimo de modelos requeridos para pensar
     min_models: int = 2
-    # Nº máximo de modelos a usar (limita costes)
     max_models: int = 5
-    # Timeout por modelo en segundos
     timeout_seconds: float = 30.0
-    # Estrategia de fusión por defecto
     default_strategy: FusionStrategy = FusionStrategy.SYNTHESIS
-    # Temperatura por defecto
     temperature: float = 0.3
-    # Max tokens por respuesta
     max_tokens: int = 4096
-    # Provider para el juez de síntesis (None = el primero disponible)
     judge_provider: str | None = None
     judge_model: str | None = None
+    # Retry en caso de fallo individual
+    retry_on_failure: bool = True
+    retry_delay_seconds: float = 1.0
+    # Usar system prompts específicos por modo
+    use_mode_prompts: bool = True
+
+
+# ─── Provider Pool ───────────────────────────────────────────────────
+
+
+class _ProviderPool:
+    """Pool de LLMProviders reutilizables.
+
+    Evita crear/destruir httpx.AsyncClient en cada query.
+    Un provider por clave (provider_name, model).
+    """
+
+    def __init__(self):
+        self._pool: dict[tuple[str, str], LLMProvider] = {}
+
+    def get(self, provider_name: str, model: str) -> LLMProvider:
+        """Obtiene o crea un provider del pool."""
+        key = (provider_name, model)
+        if key not in self._pool:
+            self._pool[key] = LLMProvider(provider=provider_name, model=model)
+            logger.debug("Pool: creado %s:%s", provider_name, model)
+        return self._pool[key]
+
+    async def close_all(self) -> None:
+        """Cierra todos los providers del pool."""
+        for key, provider in self._pool.items():
+            try:
+                await provider.close()
+            except Exception as e:
+                logger.debug("Pool: error cerrando %s: %s", key, e)
+        self._pool.clear()
+
+    @property
+    def size(self) -> int:
+        return len(self._pool)
+
+
+# ─── History Tracking ────────────────────────────────────────────────
+
+
+@dataclass
+class ThinkingRecord:
+    """Registro de un pensamiento para análisis retrospectivo."""
+
+    mode: str
+    strategy: str
+    models_queried: int
+    models_succeeded: int
+    total_latency_ms: float
+    confidence: float
+    agreement: float
+    winner: str | None = None
+    timestamp: float = field(default_factory=time.time)
+
+
+# ─── Thought Orchestra ──────────────────────────────────────────────
 
 
 class ThoughtOrchestra:
     """N modelos pensando en paralelo con fusión por consenso.
 
-    Crea instancias de LLMProvider dinámicamente según las API keys
-    disponibles. Ejecuta en paralelo con asyncio.gather y fusiona
-    los resultados con ThoughtFusion.
+    Crea instancias de LLMProvider via pool reutilizable.
+    Ejecuta en paralelo con asyncio.gather, retry en fallos,
+    y fusiona los resultados con ThoughtFusion.
+
+    Soporta context manager::
+
+        async with ThoughtOrchestra() as o:
+            result = await o.think("pregunta")
     """
 
     def __init__(
@@ -137,69 +226,80 @@ class ThoughtOrchestra:
     ):
         self.config = config or OrchestraConfig()
         self._routing = routing or DEFAULT_ROUTING
-        self._available_providers: dict[str, LLMProvider] = {}
+        self._pool = _ProviderPool()
         self._fusion: ThoughtFusion | None = None
         self._judge: LLMProvider | None = None
         self._initialized = False
+        self._history: list[ThinkingRecord] = []
+        self._available_cache: list[str] | None = None
 
-    async def _initialize(self) -> None:
+    # ── Lifecycle ────────────────────────────────────────────────
+
+    async def __aenter__(self) -> ThoughtOrchestra:
+        self._initialize()
+        return self
+
+    async def __aexit__(self, *exc) -> None:
+        await self.close()
+
+    def _initialize(self) -> None:
         """Lazy initialization: detecta qué providers tienen API key."""
         if self._initialized:
             return
 
         self._initialized = True
-
-        # Checar qué providers están configurados
-        available = []
-        for name, preset in PROVIDER_PRESETS.items():
-            env_key = preset.get("env_key", "")
-            if not env_key:
-                continue  # Local providers (ollama, etc.) — no para orchestra
-            if os.environ.get(env_key):
-                available.append(name)
+        available = self._detect_available_providers()
+        self._available_cache = available
 
         logger.info(
-            "ThoughtOrchestra: %d providers con API key configurada: %s",
+            "ThoughtOrchestra: %d providers disponibles: %s",
             len(available), available,
         )
 
         if len(available) < self.config.min_models:
             logger.warning(
-                "ThoughtOrchestra necesita mínimo %d providers, solo hay %d. "
-                "Configura más API keys para pensamiento multi-modelo.",
+                "ThoughtOrchestra necesita mínimo %d providers, hay %d.",
                 self.config.min_models, len(available),
             )
 
-        # Inicializar el juez para fusión
-        judge_provider = self.config.judge_provider
-        judge_model = self.config.judge_model
-        if judge_provider and judge_provider in available:
-            try:
-                self._judge = LLMProvider(
-                    provider=judge_provider, model=judge_model
-                )
-            except Exception as e:
-                logger.warning("Juez %s no disponible: %s", judge_provider, e)
-
-        # Si no hay juez explícito, usar el primer provider disponible
-        if self._judge is None:
-            for fallback in ["openai", "anthropic", "gemini", "qwen", "deepseek"]:
-                if fallback in available:
-                    try:
-                        self._judge = LLMProvider(provider=fallback)
-                        break
-                    except Exception:
-                        continue
-
+        self._judge = self._find_judge(available)
         self._fusion = ThoughtFusion(judge_provider=self._judge)
+
+    @staticmethod
+    def _detect_available_providers() -> list[str]:
+        """Detecta providers con API key configurada."""
+        return [
+            name for name, preset in PROVIDER_PRESETS.items()
+            if preset.get("env_key") and os.environ.get(preset["env_key"])
+        ]
+
+    def _find_judge(self, available: list[str]) -> LLMProvider | None:
+        """Encuentra el mejor provider disponible para actuar como juez."""
+        # Juez explícito
+        judge_name = self.config.judge_provider
+        if judge_name and judge_name in available:
+            try:
+                return self._pool.get(judge_name, self.config.judge_model or "")
+            except Exception as e:
+                logger.warning("Juez %s no disponible: %s", judge_name, e)
+
+        # Fallback: primer provider premium disponible
+        for fallback in ["openai", "anthropic", "gemini", "qwen", "deepseek"]:
+            if fallback in available:
+                try:
+                    return self._pool.get(
+                        fallback, PROVIDER_PRESETS[fallback]["default_model"]
+                    )
+                except Exception:
+                    continue
+        return None
+
+    # ── Model Resolution ─────────────────────────────────────────
 
     def _resolve_models(
         self, mode: ThinkingMode | str
     ) -> list[tuple[str, str]]:
-        """Resuelve qué modelos usar para un modo dado.
-
-        Filtra por API keys disponibles y aplica max_models.
-        """
+        """Resuelve qué modelos usar para un modo dado."""
         mode_key = ThinkingMode(mode) if isinstance(mode, str) else mode
         candidates = self._routing.get(mode_key, [])
 
@@ -211,11 +311,12 @@ class ThoughtOrchestra:
             env_key = preset.get("env_key", "")
             if env_key and os.environ.get(env_key):
                 resolved.append((provider_name, model))
-
             if len(resolved) >= self.config.max_models:
                 break
 
         return resolved
+
+    # ── Query with Retry ──────────────────────────────────────────
 
     async def _query_model(
         self,
@@ -224,12 +325,14 @@ class ThoughtOrchestra:
         prompt: str,
         system: str,
     ) -> ModelResponse:
-        """Consulta un modelo individual con timeout."""
+        """Consulta un modelo individual con timeout y retry."""
         start = time.monotonic()
-        try:
-            # Crear provider fresco (evita problemas de concurrencia)
-            provider = LLMProvider(provider=provider_name, model=model)
+        last_error: str | None = None
+        attempts = 2 if self.config.retry_on_failure else 1
+
+        for attempt in range(attempts):
             try:
+                provider = self._pool.get(provider_name, model)
                 content = await asyncio.wait_for(
                     provider.complete(
                         prompt=prompt,
@@ -245,72 +348,72 @@ class ThoughtOrchestra:
                     model=model,
                     content=content,
                     latency_ms=latency,
+                    token_count=len(content.split()),  # Estimación rough
                 )
-            finally:
-                await provider.close()
 
-        except asyncio.TimeoutError:
-            latency = (time.monotonic() - start) * 1000
-            logger.warning(
-                "%s:%s timeout después de %.0fms", provider_name, model, latency
-            )
-            return ModelResponse(
-                provider=provider_name,
-                model=model,
-                content="",
-                latency_ms=latency,
-                error=f"Timeout ({self.config.timeout_seconds}s)",
-            )
-        except Exception as e:
-            latency = (time.monotonic() - start) * 1000
-            logger.error("%s:%s error: %s", provider_name, model, e)
-            return ModelResponse(
-                provider=provider_name,
-                model=model,
-                content="",
-                latency_ms=latency,
-                error=str(e),
-            )
+            except asyncio.TimeoutError:
+                last_error = f"Timeout ({self.config.timeout_seconds}s)"
+                logger.warning(
+                    "%s:%s timeout (intento %d/%d)",
+                    provider_name, model, attempt + 1, attempts,
+                )
+            except Exception as e:
+                last_error = str(e)
+                logger.warning(
+                    "%s:%s error (intento %d/%d): %s",
+                    provider_name, model, attempt + 1, attempts, e,
+                )
+
+            # Esperar antes de retry
+            if attempt < attempts - 1:
+                await asyncio.sleep(self.config.retry_delay_seconds)
+
+        latency = (time.monotonic() - start) * 1000
+        return ModelResponse(
+            provider=provider_name,
+            model=model,
+            content="",
+            latency_ms=latency,
+            error=last_error,
+        )
+
+    # ── Main Think API ────────────────────────────────────────────
 
     async def think(
         self,
         prompt: str,
         mode: str = "deep_reasoning",
-        system: str = "You are a world-class reasoning AI. Think step by step.",
+        system: str | None = None,
         strategy: FusionStrategy | str | None = None,
     ) -> FusedThought:
         """Pensamiento multi-modelo con fusión.
 
         Args:
             prompt: La pregunta o tarea.
-            mode: Modo de pensamiento (deep_reasoning, code, creative, speed, consensus).
-            system: System prompt para todos los modelos.
-            strategy: Estrategia de fusión (None = usar default del config).
+            mode: Modo de pensamiento.
+            system: System prompt (None = usa el específico del modo).
+            strategy: Estrategia de fusión (None = default del config).
 
         Returns:
             FusedThought con respuesta fusionada, confidence, y metadatos.
         """
-        await self._initialize()
+        self._initialize()
 
-        # Resolver modelos disponibles para este modo
         models = self._resolve_models(mode)
 
         if not models:
-            logger.error(
-                "ThoughtOrchestra: no hay modelos disponibles para modo '%s'. "
-                "Configura API keys para los providers del routing.", mode,
-            )
+            logger.error("No hay modelos para modo '%s'.", mode)
             return FusedThought(
                 content="Error: no hay modelos disponibles. Configura API keys.",
                 strategy=FusionStrategy.MAJORITY,
                 confidence=0.0,
             )
 
-        if len(models) == 1:
-            logger.info(
-                "ThoughtOrchestra: solo 1 modelo disponible (%s). "
-                "Se ejecutará sin fusión.", models[0],
-            )
+        # Resolver system prompt
+        if system is None and self.config.use_mode_prompts:
+            system = MODE_SYSTEM_PROMPTS.get(mode, MODE_SYSTEM_PROMPTS[ThinkingMode.DEEP_REASONING])
+        elif system is None:
+            system = "You are a world-class reasoning AI. Think step by step."
 
         # Resolver estrategia
         if strategy is None:
@@ -321,25 +424,21 @@ class ThoughtOrchestra:
             fusion_strategy = strategy
 
         logger.info(
-            "🎭 Think [%s] con %d modelos: %s | Strategy: %s",
-            mode, len(models),
-            [f"{p}:{m}" for p, m in models],
-            fusion_strategy.value,
+            "🎭 Think [%s] × %d modelos | strategy=%s",
+            mode, len(models), fusion_strategy.value,
         )
 
-        # Ejecutar TODOS en paralelo
+        # Ejecución paralela
         start = time.monotonic()
         responses = await asyncio.gather(*[
-            self._query_model(provider, model, prompt, system)
-            for provider, model in models
+            self._query_model(p, m, prompt, system) for p, m in models
         ])
         total_ms = (time.monotonic() - start) * 1000
 
+        ok_count = sum(1 for r in responses if r.ok)
         logger.info(
-            "🎭 Think completado en %.0fms | %d/%d exitosos",
-            total_ms,
-            len([r for r in responses if r.ok]),
-            len(responses),
+            "🎭 Think completado: %.0fms | %d/%d exitosos",
+            total_ms, ok_count, len(responses),
         )
 
         # Fusionar
@@ -349,53 +448,72 @@ class ThoughtOrchestra:
             strategy=fusion_strategy,
         )
 
-        # Agregar metadatos del orchestra
-        result.meta["mode"] = mode
-        result.meta["total_latency_ms"] = total_ms
-        result.meta["models_queried"] = len(models)
-        result.meta["models_succeeded"] = len([r for r in responses if r.ok])
+        # Metadatos del orchestra
+        result.meta.update({
+            "mode": mode,
+            "total_latency_ms": round(total_ms, 1),
+            "models_queried": len(models),
+            "models_succeeded": ok_count,
+            "pool_size": self._pool.size,
+        })
+
+        # Registrar en historial
+        self._history.append(ThinkingRecord(
+            mode=mode,
+            strategy=fusion_strategy.value,
+            models_queried=len(models),
+            models_succeeded=ok_count,
+            total_latency_ms=total_ms,
+            confidence=result.confidence,
+            agreement=result.agreement_score,
+            winner=result.meta.get("winner"),
+        ))
 
         return result
 
+    # ── Convenience Methods ───────────────────────────────────────
+
     async def quick_think(self, prompt: str) -> str:
-        """Atajo para pensamiento rápido. Retorna solo el contenido."""
+        """Pensamiento rápido. Retorna solo el contenido."""
         thought = await self.think(prompt, mode="speed", strategy="majority")
         return thought.content
 
     async def deep_think(self, prompt: str) -> FusedThought:
-        """Atajo para razonamiento profundo con síntesis."""
-        return await self.think(
-            prompt, mode="deep_reasoning", strategy="synthesis"
-        )
+        """Razonamiento profundo con síntesis."""
+        return await self.think(prompt, mode="deep_reasoning", strategy="synthesis")
 
     async def code_think(self, prompt: str) -> FusedThought:
-        """Atajo para análisis de código con best-of-n."""
-        return await self.think(
-            prompt, mode="code", strategy="best_of_n"
-        )
+        """Análisis de código con best-of-n."""
+        return await self.think(prompt, mode="code", strategy="best_of_n")
+
+    async def creative_think(self, prompt: str) -> FusedThought:
+        """Pensamiento creativo con weighted synthesis."""
+        return await self.think(prompt, mode="creative", strategy="weighted_synthesis")
 
     async def consensus_think(self, prompt: str) -> FusedThought:
-        """Máximo consenso — todos los modelos disponibles."""
-        return await self.think(
-            prompt, mode="consensus", strategy="synthesis"
-        )
+        """Máximo consenso — todos los modelos con síntesis."""
+        return await self.think(prompt, mode="consensus", strategy="synthesis")
+
+    # ── Cleanup ───────────────────────────────────────────────────
 
     async def close(self) -> None:
-        """Cerrar todas las conexiones."""
-        if self._judge:
-            await self._judge.close()
+        """Cerrar todas las conexiones del pool."""
+        await self._pool.close_all()
+
+    # ── Introspection ────────────────────────────────────────────
 
     @property
     def available_modes(self) -> list[str]:
-        """Modos disponibles (con al menos 1 modelo configurado)."""
-        modes = []
-        for mode in ThinkingMode:
-            if self._resolve_models(mode):
-                modes.append(mode.value)
-        return modes
+        """Modos con al menos 1 modelo configurado."""
+        return [m.value for m in ThinkingMode if self._resolve_models(m)]
+
+    @property
+    def history(self) -> list[ThinkingRecord]:
+        """Historial de pensamientos (más reciente al final)."""
+        return self._history
 
     def status(self) -> dict[str, Any]:
-        """Estado del orchestra."""
+        """Estado completo del orchestra."""
         mode_status = {}
         for mode in ThinkingMode:
             models = self._resolve_models(mode)
@@ -411,11 +529,50 @@ class ThoughtOrchestra:
                 f"{self._judge.provider_name}:{self._judge.model}"
                 if self._judge else None
             ),
+            "pool_size": self._pool.size,
+            "history_count": len(self._history),
             "modes": mode_status,
             "config": {
                 "min_models": self.config.min_models,
                 "max_models": self.config.max_models,
                 "timeout_seconds": self.config.timeout_seconds,
                 "default_strategy": self.config.default_strategy.value,
+                "retry_on_failure": self.config.retry_on_failure,
+                "use_mode_prompts": self.config.use_mode_prompts,
+            },
+        }
+
+    def stats(self) -> dict[str, Any]:
+        """Estadísticas agregadas del historial."""
+        if not self._history:
+            return {"total_thoughts": 0}
+
+        total = len(self._history)
+        avg_confidence = sum(r.confidence for r in self._history) / total
+        avg_agreement = sum(r.agreement for r in self._history) / total
+        avg_latency = sum(r.total_latency_ms for r in self._history) / total
+        success_rate = sum(
+            r.models_succeeded / r.models_queried
+            for r in self._history if r.models_queried > 0
+        ) / total
+
+        # Proveedor que más gana
+        winner_counts: dict[str, int] = {}
+        for r in self._history:
+            if r.winner:
+                provider = r.winner.split(":")[0]
+                winner_counts[provider] = winner_counts.get(provider, 0) + 1
+        top_winner = max(winner_counts, key=winner_counts.get) if winner_counts else None
+
+        return {
+            "total_thoughts": total,
+            "avg_confidence": round(avg_confidence, 3),
+            "avg_agreement": round(avg_agreement, 3),
+            "avg_latency_ms": round(avg_latency, 1),
+            "model_success_rate": round(success_rate, 3),
+            "top_winning_provider": top_winner,
+            "mode_distribution": {
+                mode: sum(1 for r in self._history if r.mode == mode)
+                for mode in {r.mode for r in self._history}
             },
         }

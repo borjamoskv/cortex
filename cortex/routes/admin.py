@@ -65,7 +65,7 @@ async def status(
     """Get engine status and statistics."""
     lang = request.headers.get("Accept-Language", "en")
     try:
-        stats = await engine.stats()
+        stats = engine.stats()
         return StatusResponse(
             version=__version__,
             total_facts=stats["total_facts"],
@@ -138,3 +138,24 @@ async def list_api_keys(auth: AuthResult = Depends(require_permission("admin")))
         }
         for k in keys
     ]
+
+
+@router.post("/v1/handoff")
+async def handoff_generate(
+    request: Request,
+    engine: CortexEngine = Depends(get_engine),
+) -> dict:
+    """Generate a session handoff with hot context."""
+    from cortex.handoff import generate_handoff, save_handoff
+
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+
+    session_meta = body.get("session", None)
+    data = await generate_handoff(engine, session_meta=session_meta)
+    save_handoff(data)
+    return data
+

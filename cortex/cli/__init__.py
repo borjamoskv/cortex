@@ -40,6 +40,7 @@ def cli() -> None:
 from cortex.cli import (  # noqa: E402
     core,  # noqa: E402, F401
     crud,  # noqa: E402, F401
+    handoff_cmds,  # noqa: E402, F401
     launchpad_cmds,  # noqa: E402, F401
     mejoralo_cmds,  # noqa: E402, F401
     sync_cmds,  # noqa: E402, F401

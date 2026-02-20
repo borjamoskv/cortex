@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import logging
 import hashlib
+import sqlite3
 from typing import Any
 
 from cortex.temporal import now_iso
@@ -76,7 +77,7 @@ class SyncWriteMixin:
                     "INSERT INTO fact_embeddings (fact_id, embedding) VALUES (?, ?)",
                     (fact_id, json.dumps(embedding)),
                 )
-            except Exception as e:
+            except (sqlite3.Error, OSError, ValueError) as e:
                 logger.warning("Embedding failed for fact %d: %s", fact_id, e)
         conn.commit()
 
@@ -98,7 +99,7 @@ class SyncWriteMixin:
             from cortex.graph import process_fact_graph_sync
 
             process_fact_graph_sync(conn, fact_id, content, project, ts)
-        except Exception as e:
+        except (sqlite3.Error, OSError, ValueError) as e:
             logger.warning("Graph extraction sync failed for fact %d: %s", fact_id, e)
 
         # [GitOps Sync]
@@ -116,7 +117,7 @@ class SyncWriteMixin:
         }
         try:
             sync_fact_to_repo(project, fact_id, fact_data, "upsert")
-        except Exception as e:
+        except (sqlite3.Error, OSError, ValueError) as e:
             logger.warning("GitOps sync falló para fact %d: %s", fact_id, e)
 
         return fact_id
@@ -219,7 +220,7 @@ class SyncWriteMixin:
                     {"id": fact_id, "valid_until": ts, "meta": {"deprecation_reason": reason or "deprecated"}},
                     "deprecate"
                 )
-            except Exception as e:
+            except (sqlite3.Error, OSError, ValueError) as e:
                 logger.warning("GitOps sync falló para fact %d: %s", fact_id, e)
                 
             return True

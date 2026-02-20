@@ -116,7 +116,7 @@ class AsyncConnectionPool:
                     await self._pool.put(conn)
                 self._initialized = True
                 return True
-            except Exception as e:
+            except (OSError, ValueError, KeyError) as e:
                 logger.error("Failed to initialize connection pool: %s", e)
                 # Cleanup if partially created
                 await self.close()
@@ -136,7 +136,7 @@ class AsyncConnectionPool:
             # Verify connection is still alive
             try:
                 await conn.execute("SELECT 1")
-            except Exception:
+            except (OSError, ValueError, KeyError):
                 logger.warning("Reviving stale database connection")
                 conn = await aiosqlite.connect(self.db_path, timeout=30.0)
                 await conn.execute("PRAGMA journal_mode=WAL")
@@ -153,6 +153,6 @@ class AsyncConnectionPool:
                 conn = await self._pool.get()
                 try:
                     await conn.close()
-                except Exception:
+                except (OSError, ValueError, KeyError):
                     pass
             self._initialized = False

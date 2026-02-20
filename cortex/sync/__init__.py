@@ -17,6 +17,7 @@ from cortex.sync.common import (
 from cortex.sync.common import (
     file_hash as _file_hash,
 )
+from cortex.sync.obsidian import export_obsidian
 from cortex.sync.read import sync_memory
 from cortex.sync.snapshot import export_snapshot
 from cortex.sync.write import export_to_json
@@ -25,6 +26,7 @@ __all__ = [
     "sync_memory",
     "export_to_json",
     "export_snapshot",
+    "export_obsidian",
     "SyncResult",
     "WritebackResult",
     "MEMORY_DIR",

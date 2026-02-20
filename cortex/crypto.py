@@ -28,7 +28,7 @@ class Vault:
             if env_key:
                 try:
                     self._key = base64.b64decode(env_key)
-                except Exception:
+                except (OSError, ValueError):
                     # Fallback if invalid base64? No, invalid key is fatal.
                     self._key = None  # Or raise
             else:
@@ -65,7 +65,7 @@ class Vault:
             aesgcm = AESGCM(self._key)
             plaintext = aesgcm.decrypt(nonce, ciphertext, None)
             return plaintext.decode("utf-8")
-        except Exception as e:
+        except (OSError, ValueError) as e:
             raise ValueError(f"Decryption failed: {e}") from e
 
     @staticmethod

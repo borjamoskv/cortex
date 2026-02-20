@@ -4,6 +4,7 @@ Extraction, relationship detection, and backend orchestration.
 """
 
 import logging
+import sqlite3
 
 from cortex.config import GRAPH_BACKEND
 from cortex.graph.backends import GraphBackend, Neo4jBackend, SQLiteBackend
@@ -135,11 +136,11 @@ async def process_fact_graph(
                 neo = Neo4jBackend()
                 for ent in entities:
                     neo.upsert_entity(ent["name"], ent["entity_type"], project, timestamp)
-            except Exception as e:
+            except (sqlite3.Error, OSError, ValueError) as e:
                 logger.warning("Neo4j dual-write failed: %s", e)
 
         return len(entities), len(relationships)
-    except Exception as e:
+    except (sqlite3.Error, OSError, ValueError) as e:
         logger.warning("Graph processing failed for fact %d: %s", fact_id, e)
         return 0, 0
 
@@ -168,7 +169,7 @@ def process_fact_graph_sync(
                     source_id, target_id, rel["relation_type"], fact_id, timestamp
                 )
         return len(entities), len(relationships)
-    except Exception as e:
+    except (sqlite3.Error, OSError, ValueError) as e:
         logger.warning("Graph processing sync failed for fact %d: %s", fact_id, e)
         return 0, 0
 

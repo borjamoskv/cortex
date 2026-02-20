@@ -141,7 +141,7 @@ Answer the question above using ONLY the facts provided. Cite [Fact #ID] when re
             temperature=req.temperature,
             max_tokens=req.max_tokens,
         )
-    except Exception as e:
+    except (ConnectionError, OSError, RuntimeError) as e:
         logger.error("LLM completion failed: %s", e)
         return JSONResponse(
             status_code=502,

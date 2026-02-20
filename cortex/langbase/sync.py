@@ -94,7 +94,7 @@ async def sync_to_langbase(
             description=f"CORTEX facts from project '{project}' — auto-synced",
         )
         logger.info("Created Langbase memory: %s", mem_name)
-    except Exception as e:
+    except (ConnectionError, OSError, RuntimeError) as e:
         # Memory might already exist — that's fine
         if "already exists" not in str(e).lower() and "409" not in str(e):
             logger.warning("Memory creation note: %s", e)
@@ -131,7 +131,7 @@ async def sync_to_langbase(
                 meta={"fact_id": fact.id, "project": project, "type": fact.fact_type},
             )
             synced += 1
-        except Exception as e:
+        except (ConnectionError, OSError, RuntimeError) as e:
             errors += 1
             detail = f"Fact #{fact.id}: {e}"
             error_details.append(detail)

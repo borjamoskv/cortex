@@ -4,38 +4,86 @@ CORTEX v4.0 — API Tests.
 Tests for the FastAPI REST API endpoints.
 """
 
+import os
 import tempfile
 
 import pytest
 from fastapi.testclient import TestClient
 
-import cortex.api
-import cortex.config
-
-# Set test DB path
-_test_db = tempfile.mktemp(suffix=".db")
-
-# PATCH: Override the DB path in both config and api modules
-# to ensure the TestClient uses the temporary DB, not the user's real DB.
-cortex.config.DB_PATH = _test_db
-cortex.api.DB_PATH = _test_db
-
-from cortex.api import app
+# Unique test DB — no module-level patching to avoid state leakage
+_test_db = tempfile.mktemp(suffix="_api.db")
 
 
 @pytest.fixture(scope="module")
 def client():
-    """Create test client with bootstrapped API key."""
-    with TestClient(app) as c:
-        yield c
+    """Create test client with a completely isolated database."""
+    # Delete any leftover DB
+    for ext in ["", "-wal", "-shm"]:
+        try:
+            os.unlink(_test_db + ext)
+        except FileNotFoundError:
+            pass
+
+    import cortex.api as api_mod
+    import cortex.auth
+    import cortex.config
+    import cortex.api_state
+
+    original_db_api = api_mod.DB_PATH
+    original_db_config = cortex.config.DB_PATH
+    original_env = os.environ.get("CORTEX_DB")
+
+    # Patch DB path everywhere BEFORE lifespan runs
+    os.environ["CORTEX_DB"] = _test_db
+    api_mod.DB_PATH = _test_db
+    cortex.config.DB_PATH = _test_db
+    cortex.config.reload()
+
+    # Kill ALL singletons so lifespan creates fresh ones
+    cortex.auth._auth_manager = None
+    cortex.api_state.auth_manager = None
+    cortex.api_state.engine = None
+
+    try:
+        with TestClient(api_mod.app) as c:
+            yield c
+    finally:
+        # Restore originals
+        api_mod.DB_PATH = original_db_api
+        cortex.config.DB_PATH = original_db_config
+        cortex.config.reload()
+
+        # Restore env var
+        if original_env is not None:
+            os.environ["CORTEX_DB"] = original_env
+        else:
+            os.environ.pop("CORTEX_DB", None)
+
+        # Reset singletons
+        cortex.auth._auth_manager = None
+        cortex.api_state.auth_manager = None
+        cortex.api_state.engine = None
+
+        # Clean up test DB
+        for ext in ["", "-wal", "-shm"]:
+            try:
+                os.unlink(_test_db + ext)
+            except FileNotFoundError:
+                pass
 
 
 @pytest.fixture(scope="module")
 def api_key(client):
-    """Bootstrap first API key."""
-    resp = client.post("/v1/admin/keys?name=test-key&tenant_id=test")
-    assert resp.status_code == 200
-    return resp.json()["key"]
+    """Create an API key directly via AuthManager (bypasses HTTP bootstrap race)."""
+    from cortex.auth import AuthManager
+
+    mgr = AuthManager(_test_db)
+    raw_key, _ = mgr.create_key(
+        name="test-key",
+        tenant_id="test",
+        permissions=["read", "write", "admin"],
+    )
+    return raw_key
 
 
 @pytest.fixture(scope="module")
@@ -88,11 +136,9 @@ class TestFacts:
         )
         assert resp.status_code == 200
         assert resp.json()["fact_id"] > 0
-        # The API stores under auth.tenant_id ("test"), not the JSON body's "project"
         assert resp.json()["project"] == "test"
 
     def test_recall(self, client, auth_headers):
-        # Must query the tenant_id used by the API key ("test"), not "demo"
         resp = client.get("/v1/projects/test/facts", headers=auth_headers)
         assert resp.status_code == 200
         facts = resp.json()
@@ -100,7 +146,6 @@ class TestFacts:
         assert any("SQLite" in f["content"] for f in facts)
 
     def test_deprecate(self, client, auth_headers):
-        # Store and deprecate
         store_resp = client.post(
             "/v1/facts", json={"project": "demo", "content": "temporary fact"}, headers=auth_headers
         )

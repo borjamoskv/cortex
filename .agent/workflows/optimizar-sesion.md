@@ -1,1 +1,0 @@
-/Users/borjafernandezangulo/.cortex/workflows/optimizar-sesion.md

@@ -49,7 +49,7 @@ class GossipProtocol:
                 if self.peers:
                     peer = random.choice(self.peers)
                     await self._perform_gossip(peer)
-            except Exception as e:
+            except (ConnectionError, OSError, RuntimeError) as e:
                 logger.error("Gossip error: %s", e)
 
             await asyncio.sleep(self.interval)

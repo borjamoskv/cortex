@@ -106,7 +106,7 @@ class SyncCompatMixin:
                     "INSERT INTO fact_embeddings (fact_id, embedding) VALUES (?, ?)",
                     (fact_id, json.dumps(embedding)),
                 )
-            except Exception as e:
+            except (sqlite3.Error, OSError, ValueError) as e:
                 logger.warning("Embedding failed for fact %d: %s", fact_id, e)
         conn.commit()
 
@@ -130,7 +130,7 @@ class SyncCompatMixin:
 
             process_fact_graph_sync(conn, fact_id, content, project, ts)
             conn.commit()
-        except Exception as e:
+        except (sqlite3.Error, OSError, ValueError) as e:
             logger.warning("Graph extraction sync failed for fact %d: %s", fact_id, e)
 
         return fact_id
@@ -165,7 +165,7 @@ class SyncCompatMixin:
                 )
                 if results:
                     return results
-            except Exception as e:
+            except (sqlite3.Error, OSError, ValueError) as e:
                 logger.warning("Semantic search sync failed: %s", e)
 
         return text_search_sync(conn, query, project=project, limit=top_k)
@@ -442,7 +442,7 @@ class SyncCompatMixin:
         try:
             cursor = conn.execute("SELECT COUNT(*) FROM fact_embeddings")
             embeddings = cursor.fetchone()[0]
-        except Exception:
+        except (sqlite3.Error, OSError, ValueError):
             embeddings = 0
 
         return {

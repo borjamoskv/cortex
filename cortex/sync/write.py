@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import sqlite3
 from typing import TYPE_CHECKING
 
 from cortex.sync.common import (
@@ -53,7 +54,7 @@ def export_to_json(engine: CortexEngine) -> WritebackResult:
             wb_hashes["ghost"] = db_hash
         else:
             result.files_skipped += 1
-    except Exception as e:
+    except (sqlite3.Error, json.JSONDecodeError, OSError) as e:
         result.errors.append(f"ghost: {e}")
         logger.exception("Write-back ghosts failed")
 
@@ -67,7 +68,7 @@ def export_to_json(engine: CortexEngine) -> WritebackResult:
             wb_hashes["system"] = combined_hash
         else:
             result.files_skipped += 1
-    except Exception as e:
+    except (sqlite3.Error, json.JSONDecodeError, OSError) as e:
         result.errors.append(f"system: {e}")
         logger.exception("Write-back system failed")
 
@@ -79,7 +80,7 @@ def export_to_json(engine: CortexEngine) -> WritebackResult:
             wb_hashes["error"] = db_hash
         else:
             result.files_skipped += 1
-    except Exception as e:
+    except (sqlite3.Error, json.JSONDecodeError, OSError) as e:
         result.errors.append(f"error: {e}")
         logger.exception("Write-back mistakes failed")
 
@@ -91,7 +92,7 @@ def export_to_json(engine: CortexEngine) -> WritebackResult:
             wb_hashes["bridge"] = db_hash
         else:
             result.files_skipped += 1
-    except Exception as e:
+    except (sqlite3.Error, json.JSONDecodeError, OSError) as e:
         result.errors.append(f"bridge: {e}")
         logger.exception("Write-back bridges failed")
 

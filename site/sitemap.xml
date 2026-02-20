@@ -2,38 +2,54 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://borjamoskv.github.io/cortex/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-19</lastmod>
     </url>
     <url>
          <loc>https://borjamoskv.github.io/cortex/api/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-19</lastmod>
     </url>
     <url>
          <loc>https://borjamoskv.github.io/cortex/architecture/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-19</lastmod>
     </url>
     <url>
          <loc>https://borjamoskv.github.io/cortex/cli/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-19</lastmod>
+    </url>
+    <url>
+         <loc>https://borjamoskv.github.io/cortex/cognitive_sovereignty_architectures/</loc>
+         <lastmod>2026-02-19</lastmod>
     </url>
     <url>
          <loc>https://borjamoskv.github.io/cortex/installation/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-19</lastmod>
     </url>
     <url>
          <loc>https://borjamoskv.github.io/cortex/quickstart/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-19</lastmod>
+    </url>
+    <url>
+         <loc>https://borjamoskv.github.io/cortex/scaling_plan/</loc>
+         <lastmod>2026-02-19</lastmod>
+    </url>
+    <url>
+         <loc>https://borjamoskv.github.io/cortex/wave_5_proposal/</loc>
+         <lastmod>2026-02-19</lastmod>
+    </url>
+    <url>
+         <loc>https://borjamoskv.github.io/cortex/architecture/overview/</loc>
+         <lastmod>2026-02-19</lastmod>
     </url>
     <url>
          <loc>https://borjamoskv.github.io/cortex/tutorials/daemon/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-19</lastmod>
     </url>
     <url>
          <loc>https://borjamoskv.github.io/cortex/tutorials/langchain/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-19</lastmod>
     </url>
     <url>
          <loc>https://borjamoskv.github.io/cortex/tutorials/temporal/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-19</lastmod>
     </url>
 </urlset>

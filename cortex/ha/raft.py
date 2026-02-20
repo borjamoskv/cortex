@@ -146,7 +146,7 @@ class RaftNode:
                 (self.role.value, self.node_id),
             )
             await self.conn.commit()
-        except Exception as e:
+        except (ConnectionError, OSError, RuntimeError) as e:
             logger.error("Failed to update last_seen: %s", e)
 
     async def receive_heartbeat(self, leader_id: str, term: int):

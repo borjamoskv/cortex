@@ -9,6 +9,7 @@ import sqlite3
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Callable
 
 import httpx
 
@@ -27,6 +28,7 @@ from cortex.daemon.models import (
     DaemonStatus,
 )
 from cortex.daemon.monitors import (
+    AutonomousMejoraloMonitor,
     CertMonitor,
     DiskMonitor,
     EngineHealthCheck,
@@ -76,6 +78,10 @@ class MoskvDaemon:
             config_dir / "system.json",
             file_config.get("memory_stale_hours", memory_stale_hours),
         )
+        self.auto_mejoralo = AutonomousMejoraloMonitor(
+            projects=file_config.get("auto_mejoralo_projects", {}),
+            interval_seconds=file_config.get("auto_mejoralo_interval", 1800),
+        )
 
         cert_hostnames = [
             h.replace("https://", "").replace("http://", "").split("/")[0]
@@ -122,77 +128,17 @@ class MoskvDaemon:
         now = datetime.now(timezone.utc).isoformat()
         status = DaemonStatus(checked_at=now)
 
-        # 1. Site checks
-        try:
-            status.sites = self.site_monitor.check_all()
-            for site in status.sites:
-                if not site.healthy and self._should_alert(f"site:{site.url}"):
-                    Notifier.alert_site_down(site)
-        except (httpx.HTTPError, OSError) as e:
-            status.errors.append(f"Site monitor error: {e}")
-            logger.exception("Site monitor failed")
+        # Run all monitors through unified runner
+        self._run_monitor(status, "sites", self.site_monitor, self._alert_sites, method="check_all")
+        self._run_monitor(status, "stale_ghosts", self.ghost_watcher, self._alert_ghosts)
+        self._run_monitor(status, "memory_alerts", self.memory_syncer, self._alert_memory)
+        self._run_monitor(status, "cert_alerts", self.cert_monitor, self._alert_certs)
+        self._run_monitor(status, "engine_alerts", self.engine_health, self._alert_engine)
+        self._run_monitor(status, "disk_alerts", self.disk_monitor, self._alert_disk)
+        self._run_monitor(status, "mejoralo_alerts", self.auto_mejoralo, self._alert_mejoralo)
 
-        # 2. Ghost checks
-        try:
-            status.stale_ghosts = self.ghost_watcher.check()
-            for ghost in status.stale_ghosts:
-                if self._should_alert(f"ghost:{ghost.project}"):
-                    Notifier.alert_stale_project(ghost)
-        except (ValueError, OSError) as e:
-            status.errors.append(f"Ghost watcher error: {e}")
-            logger.exception("Ghost watcher failed")
-
-        # 3. Memory checks
-        try:
-            status.memory_alerts = self.memory_syncer.check()
-            for alert in status.memory_alerts:
-                if self._should_alert(f"memory:{alert.file}"):
-                    logger.warning("Memory file %s is stale, notification skipped", alert.file)
-        except (ValueError, OSError) as e:
-            status.errors.append(f"Memory syncer error: {e}")
-            logger.exception("Memory syncer failed")
-
-        # 4. SSL certificate checks
-        try:
-            status.cert_alerts = self.cert_monitor.check()
-            for cert in status.cert_alerts:
-                if self._should_alert(f"cert:{cert.hostname}"):
-                    logger.warning("SSL certificate for %s expiring soon", cert.hostname)
-        except OSError as e:
-            status.errors.append(f"Cert monitor error: {e}")
-            logger.exception("Cert monitor failed")
-
-        # 5. Engine health
-        try:
-            status.engine_alerts = self.engine_health.check()
-            for eh in status.engine_alerts:
-                if self._should_alert(f"engine:{eh.issue}"):
-                    logger.warning("CORTEX Engine alert for %s", eh.issue)
-        except OSError as e:
-            status.errors.append(f"Engine health error: {e}")
-            logger.exception("Engine health check failed")
-
-        # 6. Disk usage
-        try:
-            status.disk_alerts = self.disk_monitor.check()
-            for da in status.disk_alerts:
-                if self._should_alert(f"disk:{da.path}"):
-                    logger.warning("Disk space low on %s", da.path)
-        except OSError as e:
-            status.errors.append(f"Disk monitor error: {e}")
-            logger.exception("Disk monitor failed")
-
-        # 7. Automatic memory sync
         self._auto_sync(status)
-
-        # 8. Time Tracker Flush
-        if self.tracker:
-            try:
-                entries = self.tracker.flush()
-                if entries > 0:
-                    logger.info("TimeTracker: Consolidado %d entradas de tiempo.", entries)
-            except sqlite3.Error as e:
-                logger.error("TimeTracker flush error: %s", e)
+        self._flush_timer()
 
         status.check_duration_ms = (time.monotonic() - check_start) * 1000
         self._save_status(status)
@@ -208,6 +154,93 @@ class MoskvDaemon:
         )
         return status
 
+    def _run_monitor(
+        self,
+        status: DaemonStatus,
+        attr: str,
+        monitor: object,
+        alert_fn: Callable,
+        method: str = "check",
+    ) -> None:
+        """Run a single monitor, store results, and fire alerts."""
+        try:
+            results = getattr(monitor, method)()
+            if isinstance(results, list):
+                setattr(status, attr, results)
+            alert_fn(results)
+        except (httpx.HTTPError, OSError, ValueError, sqlite3.Error) as e:
+            status.errors.append(f"{type(monitor).__name__} error: {e}")
+            logger.exception("%s failed", type(monitor).__name__)
+
+    def _alert_sites(self, sites: list) -> None:
+        for site in sites:
+            if not site.healthy and self._should_alert(f"site:{site.url}"):
+                Notifier.alert_site_down(site)
+
+    def _alert_ghosts(self, ghosts: list) -> None:
+        for ghost in ghosts:
+            if self._should_alert(f"ghost:{ghost.project}"):
+                Notifier.alert_stale_project(ghost)
+
+    def _alert_memory(self, alerts: list) -> None:
+        for alert in alerts:
+            if self._should_alert(f"memory:{alert.file}"):
+                logger.warning("Memory file %s is stale", alert.file)
+
+    def _alert_certs(self, certs: list) -> None:
+        for cert in certs:
+            if self._should_alert(f"cert:{cert.hostname}"):
+                logger.warning("SSL certificate for %s expiring soon", cert.hostname)
+
+    def _alert_engine(self, alerts: list) -> None:
+        for eh in alerts:
+            if self._should_alert(f"engine:{eh.issue}"):
+                logger.warning("CORTEX Engine alert for %s", eh.issue)
+
+    def _alert_disk(self, alerts: list) -> None:
+        for da in alerts:
+            if self._should_alert(f"disk:{da.path}"):
+                logger.warning("Disk space low on %s", da.path)
+
+    def _alert_mejoralo(self, alerts: list) -> None:
+        for alert in alerts:
+            if alert.score < 50 and self._should_alert(f"mejoralo:{alert.project}"):
+                logger.warning("Autonomous MEJORAlo scan for %s returned low score: %d/100 (Dead Code: %s)", 
+                             alert.project, alert.score, alert.dead_code)
+                try:
+                    import subprocess
+                    from cortex.daemon.notifier import Notifier
+                    Notifier.notify(
+                        "☢️ MEJORAlo Brutal Mode",
+                        f"Project {alert.project} score: {alert.score}. Waking up Legion-1 Swarm (400-subagents).",
+                        sound="Basso"
+                    )
+                    path_str = self.auto_mejoralo.projects.get(alert.project, ".")
+                    # Dispatch en background (fire and forget)
+                    subprocess.Popen(
+                        [
+                            "/Users/borjafernandezangulo/cortex/.venv/bin/python",
+                            "-m", "cortex.cli", "mejoralo", "scan",
+                            alert.project, ".", "--deep"
+                        ],
+                        cwd=path_str,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL
+                    )
+                except Exception as e:
+                    logger.error("Failed to auto-dispatch Swarm for %s: %s", alert.project, e)
+
+    def _flush_timer(self) -> None:
+        """Flush accumulated time tracker heartbeats."""
+        if not self.tracker:
+            return
+        try:
+            entries = self.tracker.flush()
+            if entries > 0:
+                logger.info("TimeTracker: Consolidado %d entradas de tiempo.", entries)
+        except sqlite3.Error as e:
+            logger.error("TimeTracker flush error: %s", e)
+
     def _auto_sync(self, status: DaemonStatus) -> None:
         """Automatic memory JSON ↔ CORTEX DB synchronization."""
         try:
@@ -215,7 +248,7 @@ class MoskvDaemon:
             from cortex.sync import export_snapshot, export_to_json, sync_memory
 
             engine = CortexEngine()
-            engine.init_db()
+            engine.init_db_sync()
             sync_result = sync_memory(engine)
             if sync_result.had_changes:
                 logger.info("Sync automático: %d hechos sincronizados", sync_result.total)
@@ -226,8 +259,10 @@ class MoskvDaemon:
                     wb_result.files_written,
                     wb_result.items_exported,
                 )
-            export_snapshot(engine)
-            engine.close()
+            import asyncio
+            asyncio.run(export_snapshot(engine))
+            engine.close_sync()
+
         except (sqlite3.Error, OSError, ValueError) as e:
             status.errors.append(f"Memory sync error: {e}")
             logger.exception("Memory sync failed")

@@ -1,5 +1,6 @@
 """Search mixin module."""
 import logging
+import sqlite3
 from typing import Any
 
 from cortex.graph import extract_entities, get_context_subgraph
@@ -66,7 +67,7 @@ class SearchMixin:
 
                 return results
 
-            except Exception as e:
+            except (sqlite3.Error, OSError, RuntimeError) as e:
                 logger.exception(f"Hybrid Graph-RAG search failed: {e}")
                 # Ultimate fallback to basic text search
                 return await text_search(conn, query, project, limit=top_k, as_of=as_of)

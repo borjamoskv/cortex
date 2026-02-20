@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sqlite3
 from typing import Any
 
 from cortex.engine.models import Fact
@@ -45,7 +46,7 @@ class SyncReadMixin:
                 )
                 if results:
                     return results
-            except Exception as e:
+            except (sqlite3.Error, OSError, RuntimeError) as e:
                 logger.warning("Semantic search sync failed: %s", e)
 
         return text_search_sync(conn, query, project=project, limit=top_k)
@@ -213,7 +214,7 @@ class SyncReadMixin:
         try:
             cursor = conn.execute("SELECT COUNT(*) FROM fact_embeddings")
             embeddings = cursor.fetchone()[0]
-        except Exception:
+        except (sqlite3.Error, OSError):
             embeddings = 0
 
         return {

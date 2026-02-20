@@ -1,1 +1,0 @@
-/Users/borjafernandezangulo/.cortex/workflows/ens-domain-monitor.md

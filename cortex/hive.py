@@ -114,7 +114,7 @@ def get_hive_graph(
 
         return GraphData(nodes=nodes, links=links)
 
-    except Exception as e:
+    except (sqlite3.Error, OSError, RuntimeError) as e:
         raise HTTPException(status_code=500, detail=str(e)) from None
     finally:
         conn.close()

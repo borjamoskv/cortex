@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
-    import sqlite3
+    pass
 
 import aiosqlite
 import sqlite_vec
@@ -129,6 +129,9 @@ class CortexEngine(SyncCompatMixin):
     async def store(self, *args, **kwargs):
         return await self.facts.store(*args, **kwargs)
 
+    async def store_many(self, *args, **kwargs):
+        return await self.facts.store_many(*args, **kwargs)
+
     async def search(self, *args, **kwargs):
         return await self.facts.search(*args, **kwargs)
 
@@ -143,6 +146,24 @@ class CortexEngine(SyncCompatMixin):
 
     async def history(self, *args, **kwargs):
         return await self.facts.history(*args, **kwargs)
+
+    async def time_travel(self, *args, **kwargs):
+        return await self.facts.time_travel(*args, **kwargs)
+
+    async def reconstruct_state(self, *args, **kwargs):
+        return await self.facts.reconstruct_state(*args, **kwargs)
+
+    async def retrieve(self, fact_id: int):
+        """Retrieve an active fact. Raises FactNotFound if missing or deprecated."""
+        from cortex.engine.models import Fact
+        from cortex.exceptions import FactNotFound
+        conn = await self.get_conn()
+        cursor = await conn.execute(f"SELECT {_FACT_COLUMNS} {_FACT_JOIN} WHERE f.id = ?", (fact_id,))
+        row = await cursor.fetchone()
+        fact = row_to_fact(row) if row else None
+        if not fact or fact.valid_until:
+            raise FactNotFound(f"Fact {fact_id} not found or deprecated")
+        return fact
 
     async def get_context_subgraph(self, *args, **kwargs):
         return await self.facts.get_context_subgraph(*args, **kwargs)
@@ -200,16 +221,25 @@ class CortexEngine(SyncCompatMixin):
         c = await conn.execute(
             "INSERT INTO transactions "
             "(project, action, detail, prev_hash, hash, timestamp) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (project, action, dj, ph, th, ts),
+            "VALUES (?, ?, ?, COALESCE((SELECT hash FROM transactions ORDER BY id DESC LIMIT 1), 'GENESIS'), ?, ?)",
+            (project, action, dj, th, ts),
         )
         tx_id = c.lastrowid
+
+        # Re-verify and update hash if prev_hash was different from our lookup
+        async with conn.execute("SELECT prev_hash FROM transactions WHERE id = ?", (tx_id,)) as cur:
+            row = await cur.fetchone()
+            actual_ph = row[0] if row else ph
+            if actual_ph != ph:
+                th = compute_tx_hash(actual_ph, project, action, dj, ts)
+                await conn.execute("UPDATE transactions SET hash = ? WHERE id = ?", (th, tx_id))
+
 
         if self._ledger:
             try:
                 self._ledger.record_write()
                 await self._ledger.create_checkpoint_async()
-            except Exception as e:
+            except (sqlite3.Error, OSError, RuntimeError, AttributeError) as e:
                 logger.warning("Auto-checkpoint failed: %s", e)
                 metrics.inc(
                     "cortex_ledger_checkpoint_failures_total",
@@ -258,7 +288,7 @@ class CortexEngine(SyncCompatMixin):
                     (status, now_iso(), event_id),
                 )
                 processed_count += 1
-            except Exception as e:
+            except (sqlite3.Error, OSError, RuntimeError, AttributeError) as e:
                 logger.error("Failed to process CDC event %d: %s", event_id, e)
                 await conn.execute(
                     "UPDATE graph_outbox SET status = 'failed', retry_count = retry_count + 1 WHERE id = ?",

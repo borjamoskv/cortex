@@ -18,7 +18,7 @@ class Neo4jBackend(GraphBackend):
         except ImportError:
             logger.warning("neo4j driver not installed. Neo4jBackend disabled.")
             self._initialized = False
-        except Exception as e:
+        except (ConnectionError, OSError, ImportError) as e:
             logger.warning("Failed to connect to Neo4j: %s", e)
             self._initialized = False
 

@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sqlite3
 
 from cortex.engine import CortexEngine
 
@@ -61,7 +62,7 @@ def adk_store(
             source=source or None,
         )
         return {"status": "success", "fact_id": fact_id, "project": project}
-    except Exception as exc:
+    except (sqlite3.Error, OSError, RuntimeError) as exc:
         logger.error("ADK store failed: %s", exc)
         return {"status": "error", "message": str(exc)}
     finally:
@@ -109,7 +110,7 @@ def adk_search(
             })
 
         return {"status": "success", "results": formatted, "count": len(formatted)}
-    except Exception as exc:
+    except (sqlite3.Error, OSError, RuntimeError) as exc:
         logger.error("ADK search failed: %s", exc)
         return {"status": "error", "message": str(exc)}
     finally:
@@ -130,7 +131,7 @@ def adk_status() -> dict:
         engine.init_db()
         stats = engine.stats()
         return {"status": "success", **stats}
-    except Exception as exc:
+    except (sqlite3.Error, OSError, RuntimeError) as exc:
         logger.error("ADK status failed: %s", exc)
         return {"status": "error", "message": str(exc)}
     finally:
@@ -162,7 +163,7 @@ def adk_ledger_verify() -> dict:
             "roots_checked": report.get("roots_checked", 0),
             "violations": report.get("violations", []),
         }
-    except Exception as exc:
+    except (sqlite3.Error, OSError, RuntimeError) as exc:
         logger.error("ADK ledger verify failed: %s", exc)
         return {"status": "error", "message": str(exc)}
     finally:

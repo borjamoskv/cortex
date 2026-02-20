@@ -45,10 +45,15 @@ def client():
 
 @pytest.fixture(scope="module")
 def api_key(client):
-    """Bootstrap API key."""
-    resp = client.post("/v1/admin/keys?name=test-llm&tenant_id=test")
-    assert resp.status_code == 200
-    return resp.json()["key"]
+    """Bootstrap API key programmatically to avoid HTTP auth conflicts."""
+    from cortex.auth import get_auth_manager
+    manager = get_auth_manager()
+    raw_key, _ = manager.create_key(
+        name="test-llm",
+        tenant_id="test",
+        permissions=["read", "write", "admin"],
+    )
+    return raw_key
 
 
 @pytest.fixture(scope="module")

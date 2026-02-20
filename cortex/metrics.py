@@ -13,6 +13,7 @@ and remain queryable during forensic analysis.
 import asyncio
 import logging
 import time
+import sqlite3
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from typing import Any
@@ -155,7 +156,7 @@ class MetricsRegistry:
                 meta=fact_meta,
             )
             logger.debug("Persisted critical metric: %s", key)
-        except Exception:
+        except (sqlite3.Error, OSError):
             # Never let metric persistence crash the caller.
             logger.warning("Failed to persist critical metric %s", key, exc_info=True)
 
@@ -243,7 +244,7 @@ class MetricsMiddleware:
 
         try:
             await self.app(scope, receive, send_wrapper)
-        except Exception:
+        except (sqlite3.Error, OSError):
             status_code = 500
             raise
         finally:

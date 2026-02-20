@@ -1,0 +1,49 @@
+# ─── CORTEX Memory Engine for Open-Antigravity ───
+# This is an override compose file. Use with:
+#   docker-compose -f docker-compose.yml -f docker-compose.cortex.yml up --build
+
+services:
+  cortex-memory:
+    build:
+      context: ../  # Points to the cortex repo root
+      dockerfile: Dockerfile
+    container_name: cortex-memory
+    ports:
+      - "8484:8484"
+    volumes:
+      - cortex-data:/data
+    env_file:
+      - .env.cortex
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8484/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    networks:
+      - antigravity-net
+
+  # ─── Hook into Orchestrator ───
+  # The Open-Antigravity orchestrator can reach CORTEX at:
+  #   http://cortex-memory:8484
+  # Add this to the orchestrator service:
+  #   depends_on:
+  #     cortex-memory:
+  #       condition: service_healthy
+  #   environment:
+  #     - CORTEX_URL=http://cortex-memory:8484
+  orchestrator:
+    environment:
+      - CORTEX_URL=http://cortex-memory:8484
+    depends_on:
+      cortex-memory:
+        condition: service_healthy
+
+volumes:
+  cortex-data:
+    driver: local
+
+networks:
+  antigravity-net:
+    driver: bridge

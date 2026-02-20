@@ -9,8 +9,18 @@ install: ## Install CORTEX
 dev: ## Install with dev dependencies
 	pip install -e ".[dev]"
 
-test: ## Run test suite
-	pytest tests/ -v --tb=short
+test: ## Run all tests
+	@echo "🚀 Running all tests (with 60s timeout)..."
+	.venv/bin/pytest tests/ -v
+
+test-fast: ## Run fast tests (excludes slow embedding/rag tests)
+	@echo "⚡ Running fast tests..."
+	.venv/bin/pytest tests/ -v -m "not slow"
+
+test-slow: ## Run only slow tests
+	@echo "🐢 Running slow tests..."
+	.venv/bin/pytest tests/test_graph_rag.py tests/test_mejoralo_rounds3_5.py -v
+ --tb=short
 
 lint: ## Run linter
 	ruff check cortex/ tests/

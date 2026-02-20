@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import sqlite3
 
 logger = logging.getLogger("cortex.engine.sync.search")
 
@@ -36,7 +37,7 @@ class SyncSearchMixin:
                 )
                 if results:
                     return results
-            except Exception as e:
+            except (sqlite3.Error, OSError, RuntimeError) as e:
                 logger.warning("Semantic search sync failed: %s", e)
 
         return text_search_sync(conn, query, project=project, limit=top_k)

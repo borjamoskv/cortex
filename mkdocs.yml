@@ -37,13 +37,15 @@ nav:
       - Quickstart: quickstart.md
       - Installation: installation.md
   - Reference:
+      - Architecture: architecture.md
+      - Developer Guide: developer-guide.md
       - CLI: cli.md
       - REST API: api.md
-      - Architecture: architecture.md
   - Tutorials:
       - Memory for LangChain Agents: tutorials/langchain.md
       - Time-Travel Debugging: tutorials/temporal.md
       - Site Monitoring Daemon: tutorials/daemon.md
+
 
 markdown_extensions:
   - pymdownx.highlight:

@@ -1,5 +1,6 @@
 """Agent management mixin."""
 import uuid
+import sqlite3
 from typing import Any
 
 import aiosqlite
@@ -19,7 +20,7 @@ class AgentMixin:
                 )
                 await conn.commit()
                 return agent_id
-            except Exception as e:
+            except (sqlite3.Error, OSError) as e:
                 await conn.rollback()
                 raise e
 

@@ -71,6 +71,8 @@ include = ["cortex*"]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+timeout = 60
+
 
 [tool.ruff]
 target-version = "py310"

@@ -245,7 +245,7 @@ def migrate_graph(db) -> None:
                     processed += 1
                     if processed % 10 == 0:
                         prog_status.update(f"[bold blue]Processed {processed}/{len(facts)}...[/]")
-                except Exception as e:
+                except (sqlite3.Error, OSError, RuntimeError) as e:
                     console.print(f"[red]✗ Failed at fact #{fid}: {e}[/]")
         console.print(
             Panel(

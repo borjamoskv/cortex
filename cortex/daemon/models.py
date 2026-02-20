@@ -86,6 +86,16 @@ class DiskAlert:
 
 
 @dataclass
+class MejoraloAlert:
+    """MEJORAlo scan result alert for autonomous daemon runs."""
+
+    project: str
+    score: int
+    dead_code: bool
+    total_loc: int
+
+
+@dataclass
 class DaemonStatus:
     """Full daemon check result — persisted to disk."""
 
@@ -97,6 +107,7 @@ class DaemonStatus:
     cert_alerts: list[CertAlert] = field(default_factory=list)
     engine_alerts: list[EngineHealthAlert] = field(default_factory=list)
     disk_alerts: list[DiskAlert] = field(default_factory=list)
+    mejoralo_alerts: list[MejoraloAlert] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
     @property
@@ -157,6 +168,15 @@ class DaemonStatus:
             "disk_alerts": [
                 {"path": d.path, "size_mb": round(d.size_mb, 1), "threshold_mb": d.threshold_mb}
                 for d in self.disk_alerts
+            ],
+            "mejoralo_alerts": [
+                {
+                    "project": m.project,
+                    "score": m.score,
+                    "dead_code": m.dead_code,
+                    "total_loc": m.total_loc,
+                }
+                for m in self.mejoralo_alerts
             ],
             "errors": self.errors,
         }

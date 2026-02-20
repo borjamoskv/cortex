@@ -181,7 +181,7 @@ class TestHistory:
 @pytest.mark.asyncio
 class TestStats:
     async def test_stats_correct(self, engine_with_data):
-        s = await engine_with_data.stats()
+        s = engine_with_data.stats()
         assert s["total_facts"] == 5
         assert s["active_facts"] == 5
         assert s["deprecated_facts"] == 0
@@ -190,7 +190,7 @@ class TestStats:
 
     async def test_stats_after_deprecate(self, engine_with_data):
         await engine_with_data.deprecate(1)
-        s = await engine_with_data.stats()
+        s = engine_with_data.stats()
         assert s["active_facts"] == 4
         assert s["deprecated_facts"] == 1
 

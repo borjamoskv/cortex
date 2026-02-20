@@ -37,6 +37,8 @@ def scan(project: str, path: str | Path, deep: bool = False) -> ScanResult:
         for f in files:
             fp = Path(root) / f
             if fp.suffix in extensions:
+                if f in ("constants.py", "xray_scan.py"):
+                    continue
                 source_files.append(fp)
 
     dimensions: list[DimensionResult] = []

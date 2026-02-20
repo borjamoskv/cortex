@@ -8,19 +8,20 @@ and stack detection.
 import json
 
 import pytest
+import pytest_asyncio
 
 from cortex.engine import CortexEngine
 from cortex.mejoralo import MejoraloEngine
 
 
-@pytest.fixture
-def engine(tmp_path):
+@pytest_asyncio.fixture
+async def engine(tmp_path):
     """Create a temporary CORTEX engine for testing."""
     db_path = str(tmp_path / "test_mejoralo.db")
     eng = CortexEngine(db_path, auto_embed=False)
-    eng.init_db()
+    await eng.init_db()
     yield eng
-    eng.close()
+    await eng.close()
 
 
 @pytest.fixture
@@ -120,19 +121,23 @@ class TestRecordSession:
         assert fact_id > 0
 
         # Verify it's in the database
-        conn = engine._get_conn()
-        row = conn.execute(
-            "SELECT content, fact_type, tags, meta FROM facts WHERE id = ?",
-            (fact_id,),
-        ).fetchone()
-        assert row is not None
-        assert "MEJORAlo v7.3" in row[0]
-        assert row[1] == "decision"
-        assert "mejoralo" in row[2]
-        meta = json.loads(row[3])
-        assert meta["score_before"] == 40
-        assert meta["score_after"] == 85
-        assert meta["delta"] == 45
+        conn = engine._get_sync_conn()
+        try:
+            cursor = conn.execute(
+                "SELECT content, fact_type, tags, meta FROM facts WHERE id = ?",
+                (fact_id,),
+            )
+            row = cursor.fetchone()
+            assert row is not None
+            assert "MEJORAlo" in row[0]
+            assert row[1] == "decision"
+            assert "mejoralo" in row[2]
+            meta = json.loads(row[3])
+            assert meta["score_before"] == 40
+            assert meta["score_after"] == 85
+            assert meta["delta"] == 45
+        finally:
+            conn.close()
 
 
 # ─── History ─────────────────────────────────────────────────────────

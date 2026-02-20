@@ -51,7 +51,7 @@ async def export_project(
         # export_to_json is sync, uses its own connection
         out_path = await run_in_threadpool(export_to_json, api_state.engine, project, path)
         return {"message": f"Exported project '{project}' to {out_path}", "path": str(out_path)}
-    except Exception as e:
+    except (OSError, ValueError, KeyError) as e:
         logger.error("Export failed: %s", e)
         raise HTTPException(status_code=500, detail=get_trans("error_export_failed", lang)) from None
 
@@ -76,7 +76,7 @@ async def status(
             transactions=stats["transactions"],
             db_size_mb=stats["db_size_mb"],
         )
-    except Exception as e:
+    except (OSError, ValueError, KeyError) as e:
         logger.error("Status unavailable: %s", e)
         raise HTTPException(status_code=500, detail=get_trans("error_status_unavailable", lang)) from None
 
@@ -151,7 +151,7 @@ async def handoff_generate(
     body = {}
     try:
         body = await request.json()
-    except Exception:
+    except (OSError, ValueError, KeyError):
         pass
 
     session_meta = body.get("session", None)

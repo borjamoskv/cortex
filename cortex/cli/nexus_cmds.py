@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import List, Tuple
 
 import click
+import sqlite3
 from rich.console import Console
 
 console = Console()
@@ -24,7 +25,7 @@ def run_nexus_skill(args: List[str]):
         # with full color support preserving the original aesthetics of Nexus.
         result = subprocess.run(cmd, check=False)
         return result.returncode
-    except Exception as e:
+    except (sqlite3.Error, OSError, RuntimeError) as e:
         console.print(f"[bold red]Execution Error:[/] {e}")
         sys.exit(1)
 

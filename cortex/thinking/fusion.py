@@ -20,6 +20,8 @@ import asyncio
 import json as json_mod
 import logging
 import re
+import time as time_mod
+from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
@@ -113,6 +115,63 @@ class FusedThought:
         }
 
 
+@dataclass
+class _ModelStats:
+    """Estadísticas acumuladas por modelo."""
+    wins: int = 0
+    participations: int = 0
+    total_latency_ms: float = 0.0
+
+    @property
+    def win_rate(self) -> float:
+        return self.wins / self.participations if self.participations else 0.0
+
+    @property
+    def avg_latency_ms(self) -> float:
+        return self.total_latency_ms / self.participations if self.participations else 0.0
+
+
+class ThinkingHistory:
+    """Historial acumulado de fusiones — win rates y latencias por modelo."""
+
+    def __init__(self):
+        self._stats: dict[str, _ModelStats] = defaultdict(_ModelStats)
+        self._total_fusions: int = 0
+
+    def record(self, result: FusedThought) -> None:
+        self._total_fusions += 1
+        winner_label = result.meta.get("winner")
+        for src in result.sources:
+            if not src.ok:
+                continue
+            s = self._stats[src.label]
+            s.participations += 1
+            s.total_latency_ms += src.latency_ms
+            if src.label == winner_label:
+                s.wins += 1
+
+    def top_models(self, n: int = 5) -> list[dict[str, Any]]:
+        ranked = sorted(
+            self._stats.items(),
+            key=lambda kv: kv[1].win_rate,
+            reverse=True,
+        )
+        return [
+            {
+                "model": label,
+                "win_rate": round(s.win_rate, 3),
+                "avg_latency_ms": round(s.avg_latency_ms, 1),
+                "participations": s.participations,
+                "wins": s.wins,
+            }
+            for label, s in ranked[:n]
+        ]
+
+    @property
+    def total_fusions(self) -> int:
+        return self._total_fusions
+
+
 # ─── Tokenización ───────────────────────────────────────────────────
 
 
@@ -187,8 +246,14 @@ class ThoughtFusion:
     HIGH_AGREEMENT_THRESHOLD = 0.85
     NEAR_IDENTICAL_THRESHOLD = 0.95
 
+    # ── Circuit breaker config ────────────────────────────────────
+    JUDGE_MAX_RETRIES = 2
+    JUDGE_TIMEOUT_S = 10.0
+    JUDGE_BACKOFF_BASE = 0.5
+
     def __init__(self, judge_provider=None):
         self._judge = judge_provider
+        self.history = ThinkingHistory()
 
     # ── Primary API ──────────────────────────────────────────────
 
@@ -220,7 +285,7 @@ class ThoughtFusion:
 
         # Una sola respuesta — no hay nada que fusionar
         if len(valid) == 1:
-            return FusedThought(
+            result = FusedThought(
                 content=valid[0].content,
                 strategy=strategy,
                 confidence=0.5,
@@ -228,6 +293,8 @@ class ThoughtFusion:
                 agreement_score=1.0,
                 meta={"single_source": True, "winner": valid[0].label},
             )
+            self.history.record(result)
+            return result
 
         # Pre-tokenizar (se reutiliza en agreement + majority)
         token_map = {id(r): _tokenize(r.content) for r in valid}
@@ -240,7 +307,7 @@ class ThoughtFusion:
         # Near-identical → early return con la mejor por latencia
         if agreement > self.NEAR_IDENTICAL_THRESHOLD:
             fastest = min(valid, key=lambda r: r.latency_ms)
-            return FusedThought(
+            result = FusedThought(
                 content=fastest.content,
                 strategy=FusionStrategy.MAJORITY,
                 confidence=min(agreement + 0.05, 1.0),
@@ -251,6 +318,8 @@ class ThoughtFusion:
                     "near_identical": True,
                 },
             )
+            self.history.record(result)
+            return result
 
         # Alto acuerdo o sin juez → majority
         if (
@@ -258,7 +327,9 @@ class ThoughtFusion:
             or strategy == FusionStrategy.MAJORITY
             or self._judge is None
         ):
-            return self._fuse_majority(valid, responses, agreement, strategy, token_map)
+            result = self._fuse_majority(valid, responses, agreement, strategy, token_map)
+            self.history.record(result)
+            return result
 
         # Estrategias que requieren juez
         dispatch = {
@@ -267,7 +338,49 @@ class ThoughtFusion:
             FusionStrategy.WEIGHTED_SYNTHESIS: self._fuse_weighted_synthesis,
         }
         handler = dispatch.get(strategy, self._fuse_synthesis)
-        return await handler(valid, responses, original_prompt, agreement)
+        result = await handler(valid, responses, original_prompt, agreement)
+        self.history.record(result)
+        return result
+
+    # ── Circuit Breaker ──────────────────────────────────────────
+
+    async def _judge_safe(self, prompt: str, system: str, **kwargs) -> str | None:
+        """Llama al juez con retries + timeout. Devuelve None si falla."""
+        for attempt in range(self.JUDGE_MAX_RETRIES + 1):
+            try:
+                return await asyncio.wait_for(
+                    self._judge.complete(prompt=prompt, system=system, **kwargs),
+                    timeout=self.JUDGE_TIMEOUT_S,
+                )
+            except asyncio.TimeoutError:
+                logger.warning("Judge timeout (attempt %d/%d)", attempt + 1, self.JUDGE_MAX_RETRIES + 1)
+            except (ConnectionError, OSError, RuntimeError) as e:
+                logger.warning("Judge error (attempt %d/%d): %s", attempt + 1, self.JUDGE_MAX_RETRIES + 1, e)
+            if attempt < self.JUDGE_MAX_RETRIES:
+                await asyncio.sleep(self.JUDGE_BACKOFF_BASE * (2 ** attempt))
+        return None
+
+    # ── Shared Scoring ───────────────────────────────────────────
+
+    async def _score_response(self, r: ModelResponse, original_prompt: str) -> tuple[ModelResponse, float]:
+        """Puntúa una respuesta individual usando el juez. Compartido por best_of_n y weighted_synthesis."""
+        prompt = f"QUESTION: {original_prompt}\n\nRESPONSE:\n{r.content}"
+        raw = await self._judge_safe(
+            prompt=prompt, system=self.SCORING_SYSTEM,
+            temperature=0.0, max_tokens=256,
+        )
+        if raw is None:
+            return (r, 0.5)
+        try:
+            clean = re.sub(r"```json?\s*", "", raw.strip()).rstrip("`").strip()
+            parsed = json_mod.loads(clean)
+            total = sum(
+                parsed.get(k, 5) for k in ("accuracy", "completeness", "clarity", "depth")
+            ) / 40.0
+            return (r, total)
+        except (ConnectionError, OSError, RuntimeError) as e:
+            logger.warning("Score parse failed for %s: %s", r.label, e)
+            return (r, 0.5)
 
     # ── Agreement ────────────────────────────────────────────────
 
@@ -367,13 +480,11 @@ class ThoughtFusion:
             f"RESPONSES FROM {len(valid)} MODELS:\n\n"
             + "\n\n".join(parts)
         )
-        try:
-            synthesized = await self._judge.complete(
-                prompt=judge_prompt,
-                system=self.SYNTHESIS_SYSTEM,
-                temperature=0.2,
-                max_tokens=4096,
-            )
+        synthesized = await self._judge_safe(
+            prompt=judge_prompt, system=self.SYNTHESIS_SYSTEM,
+            temperature=0.2, max_tokens=4096,
+        )
+        if synthesized:
             return FusedThought(
                 content=synthesized,
                 strategy=FusionStrategy.SYNTHESIS,
@@ -382,11 +493,10 @@ class ThoughtFusion:
                 agreement_score=agreement,
                 meta={"judge": self._judge.provider_name + ":" + self._judge.model},
             )
-        except Exception as e:
-            logger.error("Juez de síntesis falló: %s — fallback a majority", e)
-            return self._fuse_majority(
-                valid, all_responses, agreement, FusionStrategy.SYNTHESIS
-            )
+        logger.error("Juez de síntesis falló tras retries — fallback a majority")
+        return self._fuse_majority(
+            valid, all_responses, agreement, FusionStrategy.SYNTHESIS
+        )
 
     # ── BEST_OF_N ─────────────────────────────────────────────────
 
@@ -398,30 +508,7 @@ class ThoughtFusion:
         agreement: float,
     ) -> FusedThought:
         """El juez puntúa cada respuesta EN PARALELO y elige la mejor."""
-
-        async def _score_one(r: ModelResponse) -> tuple[ModelResponse, float]:
-            prompt = f"QUESTION: {original_prompt}\n\nRESPONSE:\n{r.content}"
-            try:
-                raw = await self._judge.complete(
-                    prompt=prompt,
-                    system=self.SCORING_SYSTEM,
-                    temperature=0.0,
-                    max_tokens=256,
-                )
-                # Extraer JSON (tolera markdown code blocks)
-                clean = re.sub(r"```json?\s*", "", raw.strip())
-                clean = clean.rstrip("`").strip()
-                parsed = json_mod.loads(clean)
-                total = sum(
-                    parsed.get(k, 5) for k in ("accuracy", "completeness", "clarity", "depth")
-                ) / 40.0
-                return (r, total)
-            except Exception as e:
-                logger.warning("Scoring falló para %s: %s", r.label, e)
-                return (r, 0.5)
-
-        # Paralelo — todos los scorings a la vez
-        scored = await asyncio.gather(*[_score_one(r) for r in valid])
+        scored = await asyncio.gather(*[self._score_response(r, original_prompt) for r in valid])
         scored_sorted = sorted(scored, key=lambda x: x[1], reverse=True)
         best = scored_sorted[0]
 
@@ -448,25 +535,8 @@ class ThoughtFusion:
         agreement: float,
     ) -> FusedThought:
         """Síntesis ponderada: primero puntúa, luego sintetiza con pesos."""
-
-        # Fase 1: Scoring paralelo (reutiliza _fuse_best_of_n logic)
-        async def _quick_score(r: ModelResponse) -> tuple[ModelResponse, float]:
-            prompt = f"QUESTION: {original_prompt}\n\nRESPONSE:\n{r.content}"
-            try:
-                raw = await self._judge.complete(
-                    prompt=prompt, system=self.SCORING_SYSTEM,
-                    temperature=0.0, max_tokens=256,
-                )
-                clean = re.sub(r"```json?\s*", "", raw.strip()).rstrip("`").strip()
-                parsed = json_mod.loads(clean)
-                total = sum(
-                    parsed.get(k, 5) for k in ("accuracy", "completeness", "clarity", "depth")
-                ) / 40.0
-                return (r, total)
-            except Exception:
-                return (r, 0.5)
-
-        scored = await asyncio.gather(*[_quick_score(r) for r in valid])
+        # Fase 1: Scoring paralelo (reutiliza _score_response compartido)
+        scored = await asyncio.gather(*[self._score_response(r, original_prompt) for r in valid])
 
         # Fase 2: Síntesis con scores como contexto
         parts = [
@@ -478,13 +548,11 @@ class ThoughtFusion:
             f"RESPONSES FROM {len(valid)} MODELS (with quality scores):\n\n"
             + "\n\n".join(parts)
         )
-        try:
-            synthesized = await self._judge.complete(
-                prompt=judge_prompt,
-                system=self.WEIGHTED_SYNTHESIS_SYSTEM,
-                temperature=0.2,
-                max_tokens=4096,
-            )
+        synthesized = await self._judge_safe(
+            prompt=judge_prompt, system=self.WEIGHTED_SYNTHESIS_SYSTEM,
+            temperature=0.2, max_tokens=4096,
+        )
+        if synthesized:
             avg_score = sum(s for _, s in scored) / len(scored)
             return FusedThought(
                 content=synthesized,
@@ -497,15 +565,14 @@ class ThoughtFusion:
                     "all_scores": {r.label: round(s, 4) for r, s in scored},
                 },
             )
-        except Exception as e:
-            logger.error("Weighted synthesis falló: %s — fallback", e)
-            # Fallback: elegir la mejor de scoring
-            best = max(scored, key=lambda x: x[1])
-            return FusedThought(
-                content=best[0].content,
-                strategy=FusionStrategy.WEIGHTED_SYNTHESIS,
-                confidence=best[1],
-                sources=all_responses,
-                agreement_score=agreement,
-                meta={"winner": best[0].label, "fallback": True},
-            )
+        # Fallback: elegir la mejor de scoring
+        best = max(scored, key=lambda x: x[1])
+        return FusedThought(
+            content=best[0].content,
+            strategy=FusionStrategy.WEIGHTED_SYNTHESIS,
+            confidence=best[1],
+            sources=all_responses,
+            agreement_score=agreement,
+            meta={"winner": best[0].label, "fallback": True},
+        )
+

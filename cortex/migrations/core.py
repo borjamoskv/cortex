@@ -32,7 +32,7 @@ def get_current_version(conn: sqlite3.Connection) -> int:
     try:
         row = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()
         return row[0] if row[0] is not None else 0
-    except Exception:
+    except (sqlite3.Error, OSError):
         return 0
 
 
@@ -54,7 +54,7 @@ def run_migrations(conn: sqlite3.Connection) -> int:
         for stmt in ALL_SCHEMA:
             try:
                 conn.executescript(stmt)
-            except Exception as e:
+            except (sqlite3.Error, OSError) as e:
                 msg = str(e).lower()
                 if "vec0" in str(stmt) or "no such module" in msg or "duplicate column" in msg:
                     logger.warning(
@@ -112,7 +112,7 @@ async def run_migrations_async(conn: aiosqlite.Connection) -> int:
         for stmt in ALL_SCHEMA:
             try:
                 await conn.executescript(stmt)
-            except Exception as e:
+            except (sqlite3.Error, OSError) as e:
                 msg = str(e).lower()
                 if "vec0" in str(stmt) or "no such module" in msg or "duplicate column" in msg:
                     logger.warning("Skipping schema statement: %s", e)
@@ -129,7 +129,7 @@ async def run_migrations_async(conn: aiosqlite.Connection) -> int:
                 # without await. Run them on aiosqlite's internal worker thread
                 # so they use the same thread that owns the connection.
                 await conn._execute(func, conn._conn)
-            except Exception as e:
+            except (sqlite3.Error, OSError) as e:
                 logger.error("Migration %d failed: %s", version, e)
                 await conn.rollback()
                 continue

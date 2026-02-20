@@ -16,6 +16,7 @@ from cortex.thinking.fusion import (
     FusionStrategy,
     FusedThought,
     ModelResponse,
+    ThinkingHistory,
 )
 
 __all__ = [
@@ -27,5 +28,6 @@ __all__ = [
     "FusionStrategy",
     "FusedThought",
     "ModelResponse",
+    "ThinkingHistory",
 ]
 

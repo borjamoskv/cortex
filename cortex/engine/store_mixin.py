@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sqlite3
 from typing import Any
 
 import aiosqlite
@@ -109,14 +110,14 @@ class StoreMixin:
                     "INSERT INTO fact_embeddings (fact_id, embedding) VALUES (?, ?)",
                     (fact_id, json.dumps(embedding)),
                 )
-            except Exception as e:
+            except (sqlite3.Error, OSError, ValueError) as e:
                 logger.warning("Embedding failed for fact %d: %s", fact_id, e)
 
         from cortex.graph import process_fact_graph
 
         try:
             await process_fact_graph(conn, fact_id, content, project, ts)
-        except Exception as e:
+        except (sqlite3.Error, OSError, ValueError) as e:
             logger.warning("Graph extraction failed for fact %d: %s", fact_id, e)
 
         new_tx_id = await self._log_transaction(
@@ -144,7 +145,7 @@ class StoreMixin:
                     ids.append(await self.store(commit=False, conn=conn, **fact))
                 await conn.commit()
                 return ids
-            except Exception:
+            except (sqlite3.Error, OSError, ValueError):
                 await conn.rollback()
                 raise
 

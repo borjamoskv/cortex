@@ -3,6 +3,7 @@ CORTEX v4.0 - Facts Router.
 """
 
 import logging
+import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
@@ -38,7 +39,7 @@ async def store_fact(
         source=req.source,
         meta=req.meta,
     )
-    return StoreResponse(fact_id=fact_id, project=auth.tenant_id, status="stored")
+    return StoreResponse(fact_id=fact_id, project=auth.tenant_id, message="Fact stored")
 
 
 @router.get("/v1/projects/{project}/facts", response_model=list[FactResponse])
@@ -58,20 +59,21 @@ async def recall_facts(
 
     return [
         FactResponse(
-            id=f.id,
-            project=f.project,
-            content=f.content,
-            fact_type=f.fact_type,
-            tags=f.tags,
-            confidence=f.confidence,
-            valid_from=f.valid_from,
-            valid_until=f.valid_until,
-            source=f.source,
-            meta=f.meta,
-            created_at=f.created_at,
-            updated_at=f.updated_at,
-            tx_id=f.tx_id,
-            hash=f.hash,
+            id=f["id"],
+            project=f["project"],
+            content=f["content"],
+            fact_type=f["fact_type"],
+            tags=f["tags"],
+            confidence=f["confidence"],
+            valid_from=f["valid_from"],
+            valid_until=f["valid_until"],
+            source=f["source"],
+            meta=f["meta"],
+            created_at=f["created_at"],
+            updated_at=f["updated_at"],
+            tx_id=f["tx_id"],
+            hash=f["hash"],
+            consensus_score=f.get("consensus_score", 1.0),
         )
         for f in facts
     ]
@@ -103,16 +105,18 @@ async def cast_vote(
 
         return VoteResponse(
             fact_id=fact_id,
-            score=score,
+            agent=agent_id,
+            vote=req.value,
+            new_consensus_score=score,
             confidence=updated_fact["confidence"] if updated_fact else "unknown",
         )
     except HTTPException:
         raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from None
-    except Exception:
+    except (sqlite3.Error, OSError, RuntimeError):
         logger.exception("Unexpected error during voting for fact #%d", fact_id)
-        raise HTTPException(status_code=500, detail="Internal server error") from None
+        raise HTTPException(status_code=500, detail=get_trans("error_internal_server", lang)) from None
 
 
 @router.post("/v1/facts/{fact_id}/vote-v2", response_model=VoteResponse)
@@ -135,9 +139,8 @@ async def cast_vote_v2(
 
         score = await engine.vote(
             fact_id=fact_id,
-            agent=auth.key_name or "api_agent",
+            agent=req.agent_id,
             value=req.vote,
-            agent_id=req.agent_id,
         )
 
         # Re-fetch for updated confidence
@@ -145,16 +148,18 @@ async def cast_vote_v2(
 
         return VoteResponse(
             fact_id=fact_id,
-            score=score,
+            agent=req.agent_id,
+            vote=req.vote,
+            new_consensus_score=score,
             confidence=updated_fact["confidence"] if updated_fact else "unknown",
         )
     except HTTPException:
         raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from None
-    except Exception:
+    except (sqlite3.Error, OSError, RuntimeError):
         logger.exception("RWC Vote failed")
-        raise HTTPException(status_code=500, detail="Internal voting error") from None
+        raise HTTPException(status_code=500, detail=get_trans("error_internal_voting", lang)) from None
 
 
 @router.get("/v1/facts/{fact_id}/votes", response_model=list[dict])
@@ -196,6 +201,6 @@ async def deprecate_fact(
 
     success = await engine.deprecate(fact_id, auth.tenant_id)
     if not success:
-        raise HTTPException(status_code=500, detail="Deprecation failed")
+        raise HTTPException(status_code=500, detail=get_trans("error_deprecation_failed", lang))
 
     return {"message": f"Fact #{fact_id} deprecated", "success": True}

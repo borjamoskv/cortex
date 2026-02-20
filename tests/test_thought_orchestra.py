@@ -13,6 +13,7 @@ from cortex.thinking.fusion import (
     FusionStrategy,
     ModelResponse,
     ThoughtFusion,
+    ThinkingHistory,
     _tokenize,
     _jaccard,
 )
@@ -378,3 +379,117 @@ class TestThinkingRecord:
         )
         assert record.mode == "deep_reasoning"
         assert record.timestamp > 0
+
+
+# ─── Test ThinkingHistory ────────────────────────────────────────────
+
+
+class TestThinkingHistory:
+    def test_empty_history(self):
+        h = ThinkingHistory()
+        assert h.total_fusions == 0
+        assert h.top_models() == []
+
+    def test_record_single_fusion(self):
+        h = ThinkingHistory()
+        sources = _make_responses(["A wins", "B loses"], [100.0, 200.0])
+        result = FusedThought(
+            content="A wins",
+            strategy=FusionStrategy.MAJORITY,
+            confidence=0.8,
+            sources=sources,
+            agreement_score=0.5,
+            meta={"winner": "provider_0:model_0"},
+        )
+        h.record(result)
+        assert h.total_fusions == 1
+        top = h.top_models()
+        assert len(top) == 2
+        # Provider_0 won
+        winner = next(m for m in top if m["model"] == "provider_0:model_0")
+        assert winner["wins"] == 1
+        assert winner["win_rate"] == 1.0
+
+    def test_accumulates_multiple(self):
+        h = ThinkingHistory()
+        for i in range(5):
+            sources = _make_responses(["resp_a", "resp_b"], [100.0, 200.0])
+            winner = "provider_0:model_0" if i < 3 else "provider_1:model_1"
+            result = FusedThought(
+                content="test", strategy=FusionStrategy.MAJORITY,
+                confidence=0.8, sources=sources, agreement_score=0.5,
+                meta={"winner": winner},
+            )
+            h.record(result)
+        assert h.total_fusions == 5
+        top = h.top_models(n=1)
+        assert top[0]["model"] == "provider_0:model_0"
+        assert top[0]["wins"] == 3
+
+
+# ─── Test Circuit Breaker ────────────────────────────────────────────
+
+
+class _BrokenJudge:
+    """Mock judge que siempre falla."""
+    provider_name = "broken"
+    model = "fail-1"
+
+    async def complete(self, **kwargs):
+        raise ConnectionError("Judge is down")
+
+
+class _WorkingJudge:
+    """Mock judge que devuelve JSON de scoring."""
+    provider_name = "mock"
+    model = "judge-1"
+
+    async def complete(self, **kwargs):
+        if "Rate the following" in kwargs.get("system", ""):
+            return '{"accuracy": 8, "completeness": 7, "clarity": 9, "depth": 6}'
+        return "Synthesized sovereign response."
+
+
+class TestCircuitBreaker:
+    @pytest.mark.asyncio
+    async def test_broken_judge_falls_back_to_majority(self):
+        fusion = ThoughtFusion(judge_provider=_BrokenJudge())
+        # Override retries para que el test sea rápido
+        fusion.JUDGE_MAX_RETRIES = 0
+        fusion.JUDGE_TIMEOUT_S = 1.0
+
+        responses = _make_responses([
+            "Python es un lenguaje interpretado de alto nivel.",
+            "Python es un lenguaje de programación interpretado.",
+        ])
+        result = await fusion.fuse(
+            responses, "¿Qué es Python?", strategy=FusionStrategy.SYNTHESIS
+        )
+        # Debería caer a majority como fallback
+        assert result.content in [r.content for r in responses]
+        assert result.confidence > 0
+
+    @pytest.mark.asyncio
+    async def test_working_judge_scores_correctly(self):
+        fusion = ThoughtFusion(judge_provider=_WorkingJudge())
+        responses = _make_responses([
+            "Respuesta A con contenido relevante.",
+            "Respuesta B con otra perspectiva diferente.",
+        ])
+        result = await fusion.fuse(
+            responses, "test", strategy=FusionStrategy.BEST_OF_N
+        )
+        assert result.strategy == FusionStrategy.BEST_OF_N
+        assert result.confidence > 0
+        assert "winner" in result.meta
+
+    @pytest.mark.asyncio
+    async def test_history_records_after_fuse(self):
+        fusion = ThoughtFusion()
+        responses = _make_responses([
+            "La capital de España es Madrid.",
+            "La capital de España es Madrid, la ciudad más grande.",
+        ])
+        await fusion.fuse(responses, "capital?")
+        assert fusion.history.total_fusions >= 1
+

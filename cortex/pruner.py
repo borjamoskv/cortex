@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import sqlite3
 from datetime import datetime, timedelta, timezone
 
 import aiosqlite
@@ -99,7 +100,7 @@ class EmbeddingPrunerMixin:
 
                     stats["pruned_count"] += 1
 
-                except Exception as e:
+                except (sqlite3.Error, OSError) as e:
                     logger.error("Failed to prune fact_id=%d: %s", fact_id, e)
                     stats["errors"].append({"fact_id": fact_id, "error": str(e)})
 
@@ -144,7 +145,7 @@ class EmbeddingPrunerMixin:
             try:
                 pruned = await conn.execute("SELECT COUNT(*) FROM pruned_embeddings")
                 pruned_count = (await pruned.fetchone())[0]
-            except Exception:
+            except (sqlite3.Error, OSError):
                 pruned_count = 0
 
         return {

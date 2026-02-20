@@ -86,10 +86,10 @@ class ChronosEngine:
         "low": [
             "Crear una abstracción sobre-ingenierizada para un problema de 3 líneas.",
             "Aplicar arquitecturas God-Mode (Clean Architecture, CQRS) donde bastaba un script secuencial.",
-            "Ignorar herramientas nativas (grep, awk) intentando escribir todo en Python/JS."
+            "Ignorar herramientas nativas (grep, awk) intentando escribir el código enteramente en Python/JS."
         ],
         "medium": [
-            "Escribir todo el código del tirón sin tests intermedios ni type-checking.",
+            "Escribir el código por completo del tirón sin tests intermedios ni type-checking.",
             "Usar variables globales o estado mutable compartido por 'ahorrar tiempo'.",
             "Copiar y pegar de un proyecto anterior sin adaptar el contexto."
         ],

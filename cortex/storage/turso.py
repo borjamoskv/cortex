@@ -67,7 +67,7 @@ class TursoBackend:
             columns = [desc[0] for desc in cursor.description]
             rows = cursor.fetchall()
             return [dict(zip(columns, row)) for row in rows]
-        except Exception as e:
+        except (OSError, ValueError) as e:
             logger.error("Turso execute error: %s | SQL: %s", e, sql[:200])
             raise
 
@@ -78,7 +78,7 @@ class TursoBackend:
             cursor = self._conn.execute(sql, params)
             self._conn.commit()
             return cursor.lastrowid or 0
-        except Exception as e:
+        except (OSError, ValueError) as e:
             logger.error("Turso insert error: %s", e)
             raise
 
@@ -89,7 +89,7 @@ class TursoBackend:
             for params in params_list:
                 self._conn.execute(sql, params)
             self._conn.commit()
-        except Exception as e:
+        except (OSError, ValueError) as e:
             logger.error("Turso executemany error: %s", e)
             raise
 
@@ -105,7 +105,7 @@ class TursoBackend:
             for stmt in statements:
                 self._conn.execute(stmt)
             self._conn.commit()
-        except Exception as e:
+        except (OSError, ValueError) as e:
             logger.error("Turso executescript error: %s", e)
             raise
 
@@ -119,7 +119,7 @@ class TursoBackend:
         if self._conn:
             try:
                 self._conn.close()
-            except Exception as e:
+            except (OSError, ValueError) as e:
                 logger.warning("Error closing Turso connection: %s", e)
             self._conn = None
 
@@ -128,7 +128,7 @@ class TursoBackend:
         try:
             result = await self.execute("SELECT 1 AS ok")
             return len(result) > 0 and result[0].get("ok") == 1
-        except Exception:
+        except (OSError, ValueError):
             return False
 
     # ─── Tenant Management (Turso-specific) ───────────────────────

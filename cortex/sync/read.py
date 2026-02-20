@@ -53,7 +53,7 @@ def sync_memory(engine: CortexEngine) -> SyncResult:
         if ghosts_hash and ghosts_hash != state.get("ghosts_hash"):
             _sync_ghosts(engine, ghosts_file, result)
             state["ghosts_hash"] = ghosts_hash
-    except Exception as e:
+    except (sqlite3.Error, json.JSONDecodeError, OSError) as e:
         result.errors.append(f"ghosts.json: {e}")
         logger.error("Syncing ghosts failed: %s", e)
 
@@ -64,7 +64,7 @@ def sync_memory(engine: CortexEngine) -> SyncResult:
         if system_hash and system_hash != state.get("system_hash"):
             sync_system(engine, system_file, result)
             state["system_hash"] = system_hash
-    except Exception as e:
+    except (sqlite3.Error, json.JSONDecodeError, OSError) as e:
         result.errors.append(f"system.json: {e}")
         logger.error("Syncing system failed: %s", e)
 
@@ -75,7 +75,7 @@ def sync_memory(engine: CortexEngine) -> SyncResult:
         if mistakes_hash and mistakes_hash != state.get("mistakes_hash"):
             _sync_mistakes(engine, mistakes_file, result)
             state["mistakes_hash"] = mistakes_hash
-    except Exception as e:
+    except (sqlite3.Error, json.JSONDecodeError, OSError) as e:
         result.errors.append(f"mistakes.jsonl: {e}")
         logger.error("Syncing mistakes failed: %s", e)
 
@@ -86,7 +86,7 @@ def sync_memory(engine: CortexEngine) -> SyncResult:
         if bridges_hash and bridges_hash != state.get("bridges_hash"):
             _sync_bridges(engine, bridges_file, result)
             state["bridges_hash"] = bridges_hash
-    except Exception as e:
+    except (sqlite3.Error, json.JSONDecodeError, OSError) as e:
         result.errors.append(f"bridges.jsonl: {e}")
         logger.error("Syncing bridges failed: %s", e)
 
@@ -180,7 +180,7 @@ def _sync_mistakes(engine: CortexEngine, path: Path, result: SyncResult) -> None
             )
             result.errors_synced += 1
             existing.add(content)
-        except Exception as e:
+        except (sqlite3.Error, json.JSONDecodeError, OSError) as e:
             result.errors.append(f"Error sync mistake: {e}")
 
 
@@ -213,5 +213,5 @@ def _sync_bridges(engine: CortexEngine, path: Path, result: SyncResult) -> None:
             )
             result.bridges_synced += 1
             existing.add(content)
-        except Exception as e:
+        except (sqlite3.Error, json.JSONDecodeError, OSError) as e:
             result.errors.append(f"Error sync bridge: {e}")

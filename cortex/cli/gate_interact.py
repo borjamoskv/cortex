@@ -3,6 +3,7 @@ Interactive CLI approval logic for SovereignGate.
 """
 import logging
 import time
+import sqlite3
 from typing import TYPE_CHECKING
 from cortex.sovereign_gate import ActionStatus, GateNotApproved, GatePolicy
 
@@ -29,7 +30,7 @@ def approve_interactive(gate: "SovereignGate", action_id: str) -> bool:
     # We will access the action via a new public getter or just use the private one for now as we are refactoring.
     try:
         action = gate._get_action(action_id)
-    except Exception as e:
+    except (sqlite3.Error, OSError, RuntimeError) as e:
         logger.error(f"Failed to retrieve action {action_id}: {e}")
         return False
 

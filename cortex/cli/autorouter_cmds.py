@@ -45,7 +45,7 @@ def _run_daemon(args: list[str]) -> int:
             ["python3", str(DAEMON_SCRIPT)] + args, check=False
         )
         return result.returncode
-    except Exception as e:
+    except (OSError, ValueError, KeyError) as e:
         console.print(f"[bold red]Error de ejecución:[/] {e}")
         sys.exit(1)
 
@@ -173,7 +173,7 @@ def enable_boot():
             console.print("[dim]Se iniciará automáticamente al hacer login.[/]")
         else:
             console.print(f"[bold red]❌ Error al cargar launchd:[/] {res.stderr}")
-    except Exception as e:
+    except (OSError, ValueError, KeyError) as e:
         console.print(f"[bold red]❌ Excepción:[/] {e}")
 
 
@@ -195,7 +195,7 @@ def disable_boot():
         
         # Parar también una posible instancia
         _run_daemon(["--stop"])
-    except Exception as e:
+    except (OSError, ValueError, KeyError) as e:
         console.print(f"[bold red]❌ Error:[/] {e}")
 
 

@@ -21,6 +21,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import sqlite3
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -584,5 +585,5 @@ def _log_compaction(
             ),
         )
         conn.commit()
-    except Exception as e:
+    except (sqlite3.Error, OSError, RuntimeError) as e:
         logger.warning("Failed to log compaction: %s", e)

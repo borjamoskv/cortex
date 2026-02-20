@@ -1,1 +1,0 @@
-/Users/borjafernandezangulo/.cortex/workflows/moskv-1-identity.md

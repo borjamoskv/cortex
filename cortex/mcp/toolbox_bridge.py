@@ -108,7 +108,7 @@ class ToolboxBridge:
                 len(self._tools),
             )
             return True
-        except Exception as exc:
+        except (ConnectionError, OSError, RuntimeError) as exc:
             logger.error("Failed to connect to Toolbox: %s", exc)
             self._client = None
             self._tools = []
@@ -129,7 +129,7 @@ class ToolboxBridge:
         if self._client:
             try:
                 await self._client.close()
-            except Exception:
+            except (ConnectionError, OSError):
                 pass
         self._client = None
         self._tools = []

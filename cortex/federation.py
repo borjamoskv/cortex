@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import sqlite3
 from pathlib import Path
 from typing import Any
 
@@ -132,7 +133,7 @@ class FederatedEngine:
             for tenant_id, engine in self._shards.items():
                 try:
                     await engine.close()
-                except Exception as e:
+                except (sqlite3.Error, OSError, ConnectionError) as e:
                     logger.warning("Error closing shard '%s': %s", tenant_id, e)
             self._shards.clear()
         logger.info("Federation: closed all %d shards", count)

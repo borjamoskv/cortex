@@ -32,7 +32,7 @@ def get_tracker(engine: CortexEngine) -> TimingTracker:
 @click.group()
 @click.version_option(__version__, prog_name="cortex")
 def cli() -> None:
-    """CORTEX — El Registro Soberano para Agentes de IA."""
+    """CORTEX — Trust Infrastructure for Autonomous AI."""
     pass
 
 
@@ -40,14 +40,18 @@ def cli() -> None:
 from cortex.cli import (  # noqa: E402
     core,  # noqa: E402, F401
     crud,  # noqa: E402, F401
+    context_cmds,  # noqa: E402, F401
     handoff_cmds,  # noqa: E402, F401
     launchpad_cmds,  # noqa: E402, F401
     mejoralo_cmds,  # noqa: E402, F401
     sync_cmds,  # noqa: E402, F401
     time_cmds,  # noqa: E402, F401
     timeline_cmds,  # noqa: E402, F401
+    trust_cmds,  # noqa: E402, F401  — Trust & Compliance
     vote_ledger,  # noqa: E402, F401
+    nexus_cmds,  # noqa: E402, F401
 )
+from cortex.cli.context_cmds import context  # noqa: E402
 from cortex.cli.launchpad_cmds import launchpad  # noqa: E402
 from cortex.cli.mejoralo_cmds import mejoralo  # noqa: E402
 
@@ -63,6 +67,9 @@ cli.add_command(timeline)
 cli.add_command(launchpad)
 cli.add_command(launchpad, name="mission")  # Alias por compatibilidad
 cli.add_command(mejoralo)
+cli.add_command(context)
+from cortex.cli.nexus_cmds import nexus_cmds as nexus_cli
+cli.add_command(nexus_cli, name="nexus")
 
 
 if __name__ == "__main__":

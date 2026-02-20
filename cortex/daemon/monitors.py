@@ -29,10 +29,64 @@ from cortex.daemon.models import (
     EngineHealthAlert,
     GhostAlert,
     MemoryAlert,
+    MejoraloAlert,
     SiteStatus,
 )
 
 logger = logging.getLogger("moskv-daemon")
+
+
+class AutonomousMejoraloMonitor:
+    """Runs MEJORAlo scan automatically on configured projects."""
+
+    def __init__(self, projects: dict[str, str], interval_seconds: int = 1800):
+        self.projects = projects
+        self.interval_seconds = interval_seconds
+        self._last_runs: dict[str, float] = {}
+
+    def check(self) -> list[MejoraloAlert]:
+        """Run MEJORAlo scan if interval has elapsed."""
+        alerts = []
+        if not self.projects:
+            return alerts
+
+        now = time.monotonic()
+        try:
+            from cortex.engine import CortexEngine
+            from cortex.mejoralo import MejoraloEngine
+        except ImportError:
+            return alerts
+
+        for project, path_str in self.projects.items():
+            last_run = self._last_runs.get(project, 0)
+            if now - last_run >= self.interval_seconds:
+                path = Path(path_str).expanduser().resolve()
+                if path.exists() and path.is_dir():
+                    try:
+                        engine = CortexEngine()
+                        m = MejoraloEngine(engine)
+                        logger.info("Autonomous MEJORAlo running on %s", project)
+                        result = m.scan(project, path)
+
+                        alerts.append(MejoraloAlert(
+                            project=project,
+                            score=result.score,
+                            dead_code=result.dead_code,
+                            total_loc=result.total_loc
+                        ))
+                        # We also record the session to track historical data if configured,
+                        # but for now just returning the alert is safe.
+                        
+                        self._last_runs[project] = now
+                    except Exception as e:
+                        logger.error("Autonomous MEJORAlo failed on %s: %s", project, e)
+                    finally:
+                        try:
+                            engine.close_sync()
+                        except Exception:
+                            pass
+
+        return alerts
 
 
 class SiteMonitor:
@@ -178,13 +232,12 @@ class CertMonitor:
                 with ctx.wrap_socket(sock, server_hostname=hostname) as ssock:
                     cert = ssock.getpeercert()
             not_after = cert.get("notAfter", "")
-            if not not_after:
-                return None
-            expires = datetime.strptime(not_after, "%b %d %H:%M:%S %Y %Z")
-            expires = expires.replace(tzinfo=timezone.utc)
-            days_left = (expires - datetime.now(timezone.utc)).days
-            if days_left < self.warn_days:
-                return CertAlert(hostname=hostname, expires_at=not_after, days_remaining=days_left)
+            if not_after:
+                expires = datetime.strptime(not_after, "%b %d %H:%M:%S %Y %Z")
+                expires = expires.replace(tzinfo=timezone.utc)
+                days_left = (expires - datetime.now(timezone.utc)).days
+                if days_left < self.warn_days:
+                    return CertAlert(hostname=hostname, expires_at=not_after, days_remaining=days_left)
         except (ssl.SSLError, OSError) as e:
             logger.warning("SSL check failed for %s: %s", hostname, e)
         return None

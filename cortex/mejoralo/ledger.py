@@ -30,7 +30,7 @@ def record_session(
         else f"MEJORAlo v7.3: Sesión completada. Score: {score_before} → {score_after} (Δ{delta:+d})"
     )
 
-    fact_id = engine.store(
+    fact_id = engine.store_sync(
         project=project,
         content=content,
         fact_type="decision",
@@ -51,15 +51,18 @@ def record_session(
 
 def get_history(engine: CortexEngine, project: str, limit: int = 20) -> list[dict[str, Any]]:
     """Retrieve past MEJORAlo sessions from the ledger."""
-    conn = engine._get_conn()
-    rows = conn.execute(
-        "SELECT id, content, created_at, meta "
-        "FROM facts "
-        "WHERE project = ? AND fact_type = 'decision' "
-        "AND tags LIKE '%mejoralo%' AND valid_until IS NULL "
-        "ORDER BY created_at DESC LIMIT ?",
-        (project, limit),
-    ).fetchall()
+    conn = engine._get_sync_conn()
+    try:
+        rows = conn.execute(
+            "SELECT id, content, created_at, meta "
+            "FROM facts "
+            "WHERE project = ? AND fact_type = 'decision' "
+            "AND tags LIKE '%mejoralo%' AND valid_until IS NULL "
+            "ORDER BY created_at DESC LIMIT ?",
+            (project, limit),
+        ).fetchall()
+    finally:
+        conn.close()
 
     results = []
     for row in rows:

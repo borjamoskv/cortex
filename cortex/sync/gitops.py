@@ -24,7 +24,7 @@ def _load_knowledge(json_path: Path) -> dict:
     if json_path.exists():
         try:
             return json.loads(json_path.read_text(encoding="utf-8"))
-        except Exception:
+        except (OSError, ValueError, KeyError):
             return {"facts": []}
     return {"facts": []}
 
@@ -69,7 +69,7 @@ def sync_fact_to_repo(project: str, fact_id: int, fact_data: dict[str, Any], act
         _render_snapshot(cortex_dir, facts_list, project)
         return True
         
-    except Exception as e:
+    except (OSError, ValueError, KeyError) as e:
         logger.error(f"Failed to sync GitOps memory for {project}: {e}")
         return False
 
@@ -139,6 +139,6 @@ def export_gitops_memory(engine, project: str) -> bool:
         json_path.write_text(json.dumps(knowledge, indent=2, ensure_ascii=False), encoding="utf-8")
         _render_snapshot(cortex_dir, facts_list, project)
         return True
-    except Exception as e:
+    except (OSError, ValueError, KeyError) as e:
         logger.error(f"Export fell down: {e}")
         return False

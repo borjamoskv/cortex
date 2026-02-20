@@ -1,1 +1,0 @@
-/Users/borjafernandezangulo/.cortex/workflows/naroa-debug-routing.md

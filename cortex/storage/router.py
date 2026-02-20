@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sqlite3
 from functools import lru_cache
 from typing import Any
 
@@ -88,7 +89,7 @@ class TenantRouter:
             try:
                 await conn.close()
                 logger.info("Closed connection for tenant: %s", tenant_id)
-            except Exception as e:
+            except (sqlite3.Error, OSError, ConnectionError) as e:
                 logger.warning("Error closing tenant %s: %s", tenant_id, e)
         self._connections.clear()
 

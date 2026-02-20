@@ -43,7 +43,7 @@ def sync_system(engine: CortexEngine, path: Path, result: SyncResult) -> None:
             )
             result.facts_synced += 1
             existing.add(content)
-        except Exception as e:
+        except (OSError, ValueError, KeyError) as e:
             result.errors.append(f"Error system knowledge: {e}")
 
     # decisions_global
@@ -67,7 +67,7 @@ def sync_system(engine: CortexEngine, path: Path, result: SyncResult) -> None:
             )
             result.facts_synced += 1
             existing.add(content)
-        except Exception as e:
+        except (OSError, ValueError, KeyError) as e:
             result.errors.append(f"Error system decision: {e}")
 
     # Ecosistema
@@ -90,5 +90,5 @@ def sync_system(engine: CortexEngine, path: Path, result: SyncResult) -> None:
                     meta=eco,
                 )
                 result.facts_synced += 1
-            except Exception as e:
+            except (OSError, ValueError, KeyError) as e:
                 result.errors.append(f"Error ecosystem sync: {e}")

@@ -9,7 +9,7 @@ import click
 from rich.panel import Panel
 
 from cortex.cli import DEFAULT_DB, cli, console, get_engine
-from cortex.sync import export_snapshot, export_to_json, sync_memory
+from cortex.sync import export_obsidian, export_snapshot, export_to_json, sync_memory
 
 
 def _run_async(coro):
@@ -74,9 +74,6 @@ def writeback(db) -> None:
     """Write-back: CORTEX DB → ~/.agent/memory/ (DB es Source of Truth)."""
     engine = get_engine(db)
     try:
-        # export_to_json is synchronous in current implementation based on imports
-        # checking cortex.sync.write to be sure, but assuming it is sync for now
-        # based on context. If it is async, it will fail and we fix.
         result = export_to_json(engine)
         if result.had_changes:
             console.print(
@@ -98,4 +95,36 @@ def writeback(db) -> None:
             console.print(f"[red]  ✗ {err}[/]")
     finally:
         # Fix: engine.close is async
+        _run_async(engine.close())
+
+
+@cli.command()
+@click.option("--db", default=DEFAULT_DB, help="Database path")
+@click.option(
+    "--out",
+    default="~/.cortex/obsidian-vault",
+    help="Ruta del vault Obsidian de salida",
+)
+def obsidian(db, out) -> None:
+    """Exportar CORTEX como vault de Obsidian con notas interconectadas."""
+    engine = get_engine(db)
+    engine.init_db_sync()
+    try:
+        out_path = Path(out).expanduser()
+        with console.status("[bold blue]Generando vault Obsidian...[/]"):
+            stats = _run_async(export_obsidian(engine, out_path))
+
+        console.print(
+            Panel(
+                f"[bold green]✓ Vault Obsidian generado[/]\n"
+                f"Notas creadas: {stats['notes_created']}\n"
+                f"Facts exportados: {stats['total_facts']}\n"
+                f"Proyectos: {', '.join(stats['projects'])}\n"
+                f"Tags: {len(stats['tags'])}\n"
+                f"Ruta: {stats['vault_path']}",
+                title="📓 CORTEX → Obsidian",
+                border_style="magenta",
+            )
+        )
+    finally:
         _run_async(engine.close())

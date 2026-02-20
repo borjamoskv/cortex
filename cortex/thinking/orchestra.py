@@ -95,12 +95,14 @@ DEFAULT_ROUTING: dict[str, list[tuple[str, str]]] = {
         ("openai", "gpt-4o"),
         ("anthropic", "claude-sonnet-4-20250514"),
         ("deepseek", "deepseek-reasoner"),
-        ("gemini", "gemini-2.0-flash-thinking-exp"),
+        ("zhipu", "glm-5"),
+        ("gemini", "gemini-2.5-pro"),
         ("qwen", "qwen-max"),
     ],
     ThinkingMode.CODE: [
         ("anthropic", "claude-sonnet-4-20250514"),
         ("deepseek", "deepseek-chat"),
+        ("zhipu", "glm-5"),
         ("qwen", "qwen-coder-plus"),
         ("openai", "gpt-4o"),
         ("fireworks", "accounts/fireworks/models/deepseek-coder-v2"),
@@ -120,6 +122,7 @@ DEFAULT_ROUTING: dict[str, list[tuple[str, str]]] = {
         ("together", "meta-llama/Llama-3.3-70B-Instruct-Turbo"),
     ],
     ThinkingMode.CONSENSUS: [
+        ("zhipu", "glm-5"),
         ("openai", "gpt-4o"),
         ("anthropic", "claude-sonnet-4-20250514"),
         ("deepseek", "deepseek-chat"),
@@ -138,9 +141,9 @@ DEFAULT_ROUTING: dict[str, list[tuple[str, str]]] = {
 class OrchestraConfig:
     """Configuración del orchestra."""
 
-    min_models: int = 2
-    max_models: int = 5
-    timeout_seconds: float = 30.0
+    min_models: int = 1
+    max_models: int = 500
+    timeout_seconds: float = 120.0
     default_strategy: FusionStrategy = FusionStrategy.SYNTHESIS
     temperature: float = 0.3
     max_tokens: int = 4096
@@ -179,7 +182,7 @@ class _ProviderPool:
         for key, provider in self._pool.items():
             try:
                 await provider.close()
-            except Exception as e:
+            except (OSError, ValueError, KeyError) as e:
                 logger.debug("Pool: error cerrando %s: %s", key, e)
         self._pool.clear()
 
@@ -283,7 +286,7 @@ class ThoughtOrchestra:
         if judge_name and judge_name in available:
             try:
                 return self._pool.get(judge_name, self.config.judge_model or "")
-            except Exception as e:
+            except (OSError, ValueError, KeyError) as e:
                 logger.warning("Juez %s no disponible: %s", judge_name, e)
 
         # Fallback: primer provider premium disponible
@@ -293,7 +296,7 @@ class ThoughtOrchestra:
                     return self._pool.get(
                         fallback, PROVIDER_PRESETS[fallback]["default_model"]
                     )
-                except Exception:
+                except (OSError, ValueError, KeyError):
                     continue
         return None
 
@@ -360,7 +363,7 @@ class ThoughtOrchestra:
                     "%s:%s timeout (intento %d/%d)",
                     provider_name, model, attempt + 1, attempts,
                 )
-            except Exception as e:
+            except (OSError, ValueError, KeyError) as e:
                 last_error = str(e)
                 logger.warning(
                     "%s:%s error (intento %d/%d): %s",

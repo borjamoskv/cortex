@@ -77,7 +77,8 @@ def test_wave6():
     asyncio.run(sm.restore_snapshot(snap.tx_id))
 
     print("✅ Wave 6 Verification Successful!")
-    engine.close()
+    engine.close_sync()
+
 
     # Cleanup
     if os.path.exists(db_path):

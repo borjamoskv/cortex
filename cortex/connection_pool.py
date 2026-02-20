@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import sqlite3
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -75,7 +76,7 @@ class CortexConnectionPool:
         """Create a highly-optimized, WAL-enabled async connection."""
         try:
             conn = await aiosqlite.connect(self.db_path)
-        except Exception as e:
+        except (sqlite3.Error, OSError) as e:
             logger.critical("Failed to create DB connection: %s", e)
             raise
 
@@ -133,7 +134,7 @@ class CortexConnectionPool:
 
             yield conn
 
-        except Exception:
+        except (sqlite3.Error, OSError):
             # If yield fails or setup fails, ensure we cleanup
             if conn:
                 await self._close_conn(conn)
@@ -154,14 +155,14 @@ class CortexConnectionPool:
             async with conn.execute("SELECT 1") as cursor:
                 await cursor.fetchone()
             return True
-        except Exception:
+        except (sqlite3.Error, OSError):
             return False
 
     async def _close_conn(self, conn: aiosqlite.Connection) -> None:
         """Safely close a connection."""
         try:
             await conn.close()
-        except Exception as e:
+        except (sqlite3.Error, OSError) as e:
             logger.warning("Error closing connection: %s", e)
         async with self._lock:
             self._active_count = max(0, self._active_count - 1)

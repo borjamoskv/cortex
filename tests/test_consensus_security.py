@@ -21,7 +21,10 @@ def client():
 
     # Create the test engine and auth manager
     test_engine = CortexEngine(test_db)
-    test_engine.init_db()
+    # Using init_db in a sync fixture needs careful handling if it's async
+    # But this fixture is NOT async, so we must use init_db_sync() or make it async.
+    # Actually, CortexEngine (backward compat) has init_db_sync().
+    test_engine.init_db_sync()
     test_auth_manager = AuthManager(test_db)
 
     # Save old globals
@@ -39,12 +42,13 @@ def client():
         yield c
 
     # Cleanup
-    test_engine.close()
+    test_engine.close_sync()
     if os.path.exists(test_db):
         try:
             os.remove(test_db)
         except OSError:
             pass
+
 
     # Restore Globals
     api_state.engine = old_engine

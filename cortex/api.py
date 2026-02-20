@@ -27,6 +27,7 @@ from cortex.routes import (
     admin as admin_router,
     agents as agents_router,
     ask as ask_router,
+    context as context_router,
     daemon as daemon_router,
     dashboard as dashboard_router,
     facts as facts_router,
@@ -252,6 +253,7 @@ app.include_router(ledger_router.router)
 app.include_router(missions_router.router)
 app.include_router(mejoralo_router.router)
 app.include_router(gate_router.router)
+app.include_router(context_router.router)
 app.include_router(hive_router)
 
 # Langbase integration (opt-in — only if API key is configured)

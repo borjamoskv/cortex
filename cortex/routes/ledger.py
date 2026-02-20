@@ -4,12 +4,14 @@ Cryptographic integrity verification and checkpointing.
 """
 
 import logging
+import sqlite3
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from cortex.api_deps import get_async_engine
 from cortex.auth import AuthResult, require_permission
 from cortex.engine_async import AsyncCortexEngine
+from cortex.i18n import get_trans
 from cortex.models import CheckpointResponse, LedgerReportResponse
 
 
@@ -27,6 +29,7 @@ router = APIRouter(prefix="/v1/ledger", tags=["ledger"])
 
 @router.get("/status", response_model=LedgerReportResponse)
 async def get_ledger_status(
+    request: Request,
     auth: AuthResult = Depends(require_permission("admin")),
     engine: AsyncCortexEngine = Depends(get_async_engine),
 ) -> LedgerReportResponse:
@@ -48,18 +51,20 @@ async def get_ledger_status(
         return LedgerReportResponse(
             valid=combined_valid,
             violations=combined_violations,
-            tx_checked=tx_report["tx_checked"],
-            roots_checked=tx_report["roots_checked"],
-            votes_checked=vote_report["votes_checked"],
-            vote_checkpoints_checked=vote_report["checkpoints_checked"],
+            tx_checked=tx_report.get("tx_checked", 0),
+            roots_checked=tx_report.get("roots_checked", 0),
+            votes_checked=vote_report.get("votes_checked", 0),
+            vote_checkpoints_checked=vote_report.get("checkpoints_checked", 0),
         )
-    except Exception as e:
+    except (sqlite3.Error, OSError, RuntimeError) as e:
         logger.exception("Ledger integrity check failed")
-        raise HTTPException(status_code=500, detail=f"Integrity check failed: {str(e)}") from None
+        lang = request.headers.get("Accept-Language", "en")
+        raise HTTPException(status_code=500, detail=get_trans("error_integrity_check_failed", lang).format(detail=str(e))) from None
 
 
 @router.post("/checkpoint", response_model=CheckpointResponse)
 async def create_checkpoint(
+    request: Request,
     auth: AuthResult = Depends(require_permission("admin")),
     engine: AsyncCortexEngine = Depends(get_async_engine),
 ) -> CheckpointResponse:
@@ -77,15 +82,17 @@ async def create_checkpoint(
                 message="No new transactions to checkpoint or batch size not reached",
                 status="no_action",
             )
-    except Exception as e:
+    except (sqlite3.Error, OSError, RuntimeError) as e:
         logger.exception("Merkle checkpoint creation failed")
-        raise HTTPException(status_code=500, detail=f"Checkpoint failed: {str(e)}") from None
+        lang = request.headers.get("Accept-Language", "en")
+        raise HTTPException(status_code=500, detail=get_trans("error_checkpoint_failed", lang).format(detail=str(e))) from None
 
 
 @router.get("/verify", response_model=LedgerReportResponse)
 async def verify_ledger(
+    request: Request,
     auth: AuthResult = Depends(require_permission("admin")),
     engine: AsyncCortexEngine = Depends(get_async_engine),
 ) -> LedgerReportResponse:
     """Alias for /status - performs full integrity verification."""
-    return await get_ledger_status(auth, engine)
+    return await get_ledger_status(request, auth, engine)

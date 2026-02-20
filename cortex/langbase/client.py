@@ -102,7 +102,7 @@ class LangbaseClient:
         if resp.status_code >= 400:
             try:
                 detail = resp.json().get("error", {}).get("message", resp.text)
-            except Exception:
+            except (ConnectionError, OSError):
                 detail = resp.text
             raise LangbaseError(resp.status_code, detail)
 
@@ -327,7 +327,7 @@ class LangbaseClient:
                 "error": e.detail,
                 "status_code": e.status_code,
             }
-        except Exception as e:
+        except (ConnectionError, OSError, RuntimeError) as e:
             return {
                 "connected": False,
                 "error": str(e),

@@ -5,6 +5,7 @@ Bridge between the Python ledger and the Node.js Swarm engine.
 """
 
 import logging
+import sqlite3
 from pathlib import Path
 from typing import Any
 
@@ -121,7 +122,7 @@ class MissionOrchestrator:
                 "stderr": error,
             }
 
-        except Exception as e:
+        except (sqlite3.Error, OSError, RuntimeError) as e:
             logger.error(f"Failed to launch mission: {e}")
             return {"intent_id": fact_id, "status": "error", "error": str(e)}
 

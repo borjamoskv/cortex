@@ -91,6 +91,12 @@ PROVIDER_PRESETS: dict[str, dict[str, Any]] = {
         "env_key": "COHERE_API_KEY",
         "context_window": 128000,
     },
+    "zhipu": {
+        "base_url": "https://open.bigmodel.cn/api/paas/v4",
+        "default_model": "glm-5",
+        "env_key": "ZHIPU_API_KEY",
+        "context_window": 128000,
+    },
 
     # ── Tier 2: Inference Platforms & Aggregators ───────────────────
     "openrouter": {

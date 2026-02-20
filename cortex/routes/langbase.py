@@ -102,7 +102,7 @@ async def langbase_pipe_run(
         return result
     except LangbaseError as e:
         raise HTTPException(status_code=e.status_code or 502, detail=e.detail) from None
-    except Exception:
+    except (OSError, ValueError, KeyError):
         logger.exception("Langbase pipe run failed")
         raise HTTPException(status_code=500, detail="Pipe execution failed") from None
     finally:
@@ -139,7 +139,7 @@ async def langbase_sync(
         return result
     except LangbaseError as e:
         raise HTTPException(status_code=e.status_code or 502, detail=e.detail) from None
-    except Exception:
+    except (OSError, ValueError, KeyError):
         logger.exception("Langbase sync failed")
         raise HTTPException(status_code=500, detail="Sync failed") from None
     finally:
@@ -166,7 +166,7 @@ async def langbase_memory_search(
         return {"results": results, "count": len(results), "memory": req.memory_name}
     except LangbaseError as e:
         raise HTTPException(status_code=e.status_code or 502, detail=e.detail) from None
-    except Exception:
+    except (OSError, ValueError, KeyError):
         logger.exception("Langbase search failed")
         raise HTTPException(status_code=500, detail="Memory search failed") from None
     finally:

@@ -43,7 +43,7 @@ def client(monkeypatch):
 
         with TestClient(app) as c:
             raw_key, _ = api_state.auth_manager.create_key(
-                "test_agent",
+                "api_agent",
                 tenant_id="test_proj",
                 permissions=["read", "write", "admin"],
             )
@@ -60,18 +60,24 @@ def test_consensus_flow(client):
 
     # 2. Store fact
     resp = client.post("/v1/facts", json={"project": "test_proj", "content": "The Earth is round"})
+    if resp.status_code != 200:
+        print(f"DEBUG 422 validation: {resp.text}")
     assert resp.status_code == 200
     fact_id = resp.json()["fact_id"]
 
     # 3. Upvote
-    resp = client.post(f"/v1/facts/{fact_id}/vote", json={"agent_id": agent_id, "vote": 1})
+    resp = client.post(f"/v1/facts/{fact_id}/vote", json={"value": 1})
+    if resp.status_code != 200:
+        print(f"DEBUG VOTE1: {resp.text}")
     assert resp.status_code == 200
-    assert resp.json()["new_score"] > 1.0
+    assert resp.json()["new_consensus_score"] > 1.0
 
-    # 4. Downvote from same agent (updates existing vote)
-    resp = client.post(f"/v1/facts/{fact_id}/vote", json={"agent_id": agent_id, "vote": -1})
+    # 4. Downvote
+    resp = client.post(f"/v1/facts/{fact_id}/vote", json={"value": -1})
+    if resp.status_code != 200:
+        print(f"DEBUG VOTE2: {resp.text}")
     assert resp.status_code == 200
-    assert resp.json()["new_score"] < 1.0
+    assert resp.json()["new_consensus_score"] < 1.0
 
 
 def test_recall_ordering(client):
@@ -85,13 +91,10 @@ def test_recall_ordering(client):
     fid_c = engine.store_sync("test_proj", "Fact C")
 
     # 2. Add some votes to Fact C (Upvote)
-    resp = client.post("/v1/agents", json={"name": "vote-agent", "agent_type": "ai"})
-    agent_id = resp.json()["agent_id"]
-
-    client.post(f"/v1/facts/{fid_c}/vote", json={"agent_id": agent_id, "vote": 1})
+    client.post(f"/v1/facts/{fid_c}/vote", json={"value": 1})
 
     # 3. Recall and check order (Fact C should be first)
-    resp = client.get("/v1/recall?project=test_proj")
+    resp = client.get("/v1/projects/test_proj/facts")
     facts = resp.json()
     assert facts[0]["content"] == "Fact C"
 
@@ -118,12 +121,12 @@ def test_rwc_flow(client):
     fid = engine.store_sync("test_proj", "Reputation Test Fact")
 
     # 4. Shrimp downvotes (-1), Whale upvotes (+1)
-    client.post(f"/v1/facts/{fid}/vote", json={"agent_id": agent_shrimp, "vote": -1})
-    client.post(f"/v1/facts/{fid}/vote", json={"agent_id": agent_whale, "vote": 1})
+    client.post(f"/v1/facts/{fid}/vote-v2", json={"agent_id": agent_shrimp, "vote": -1})
+    client.post(f"/v1/facts/{fid}/vote-v2", json={"agent_id": agent_whale, "vote": 1})
 
     # 5. Check score (should be > 1.0 because whale has more weight)
-    resp_recall = client.get("/v1/recall?project=test_proj")
-    fact = next(f for f in resp_recall.json() if f["fact_id"] == fid)
+    resp_recall = client.get("/v1/projects/test_proj/facts")
+    fact = next(f for f in resp_recall.json() if f["id"] == fid)
 
     assert fact["consensus_score"] > 1.0
     assert fact["confidence"] == "verified"

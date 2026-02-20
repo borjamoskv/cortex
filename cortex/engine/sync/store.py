@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sqlite3
 
 from cortex.engine.models import Fact
 from cortex.temporal import build_temporal_filter_params, now_iso
@@ -42,7 +43,7 @@ class SyncStoreMixin:
                     "INSERT INTO fact_embeddings (fact_id, embedding) VALUES (?, ?)",
                     (fact_id, json.dumps(embedding)),
                 )
-            except Exception as e:
+            except (sqlite3.Error, OSError, ValueError) as e:
                 logger.warning("Embedding failed for fact %d: %s", fact_id, e)
         conn.commit()
 
@@ -51,7 +52,7 @@ class SyncStoreMixin:
             from cortex.graph import process_fact_graph_sync
 
             process_fact_graph_sync(conn, fact_id, content, project, ts)
-        except Exception as e:
+        except (sqlite3.Error, OSError, ValueError) as e:
             logger.warning("Graph extraction sync failed for fact %d: %s", fact_id, e)
 
         return fact_id
@@ -173,7 +174,7 @@ class SyncStoreMixin:
         try:
             cursor = conn.execute("SELECT COUNT(*) FROM fact_embeddings")
             embeddings = cursor.fetchone()[0]
-        except Exception:
+        except (sqlite3.Error, OSError, ValueError):
             embeddings = 0
 
         return {

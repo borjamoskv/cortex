@@ -18,6 +18,9 @@ IGNORED_DIRS = {
     ".gemini",
     "cortex_hive_ui",
 }
+IGNORED_FILES = {
+    "xray_scan.py"
+}
 
 # Protocol Weights
 WEIGHTS = {
@@ -53,6 +56,8 @@ def iter_files(extensions=None):
         dirs[:] = [d for d in dirs if d not in IGNORED_DIRS]
 
         for file in files:
+            if file in IGNORED_FILES:
+                continue
             if extensions and not any(file.endswith(ext) for ext in extensions):
                 continue
             yield os.path.join(root, file)

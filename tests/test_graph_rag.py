@@ -35,9 +35,8 @@ async def test_engine_graph_rag_methods(engine_with_graph):
     assert "TypeScript" in node_names
 
     # Test find_path
-    paths = await engine.find_path("Vue", "JavaScript", max_depth=3)
-    assert len(paths) > 0
-    path = paths[0]
+    path = await engine.find_path("Vue", "JavaScript", max_depth=3)
+    assert len(path) > 0
     assert path[0]["source"] == "Vue"
     assert path[0]["target"] == "TypeScript"
     assert path[1]["target"] == "JavaScript"

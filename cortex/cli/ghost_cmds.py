@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import List, Tuple
 
 import click
+import sqlite3
 from rich.console import Console
 from rich.panel import Panel
 
@@ -23,7 +24,7 @@ def run_ghost_skill(args: List[str]) -> Tuple[int, str, str]:
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, check=False)
         return result.returncode, result.stdout, result.stderr
-    except Exception as e:
+    except (sqlite3.Error, OSError, RuntimeError) as e:
         console.print(f"[bold red]Execution Error:[/] {e}")
         sys.exit(1)
 

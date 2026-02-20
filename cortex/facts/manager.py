@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sqlite3
 from typing import Any
 
 from cortex.engine.models import Fact, row_to_fact
@@ -77,14 +78,14 @@ class FactManager:
                     "INSERT INTO fact_embeddings (fact_id, embedding) VALUES (?, ?)",
                     (fact_id, json.dumps(embedding)),
                 )
-            except Exception as e:
+            except (sqlite3.Error, OSError, ValueError) as e:
                 logger.warning("Embedding failed for fact %d: %s", fact_id, e)
 
         from cortex.graph import process_fact_graph
 
         try:
             await process_fact_graph(conn, fact_id, content, project, ts)
-        except Exception as e:
+        except (sqlite3.Error, OSError, ValueError) as e:
             logger.warning("Graph extraction failed for fact %d: %s", fact_id, e)
 
         tx_id = await self.engine._log_transaction(
@@ -96,6 +97,39 @@ class FactManager:
             await conn.commit()
 
         return fact_id
+
+    async def store_many(self, facts: list[dict]) -> list[int]:
+        if not facts:
+            raise ValueError("Facts list cannot be empty")
+        
+        # Validation pass before any inserts
+        for i, fact in enumerate(facts):
+            if "project" not in fact or not fact["project"].strip():
+                raise ValueError(f"Fact at index {i} is missing project")
+            if "content" not in fact or not fact["content"].strip():
+                raise ValueError(f"Fact at index {i} is missing content")
+        
+        conn = await self.engine.get_conn()
+        ids = []
+        try:
+            for fact in facts:
+                fid = await self.store(
+                    project=fact["project"],
+                    content=fact["content"],
+                    fact_type=fact.get("fact_type", "knowledge"),
+                    tags=fact.get("tags"),
+                    confidence=fact.get("confidence", "stated"),
+                    source=fact.get("source"),
+                    meta=fact.get("meta"),
+                    valid_from=fact.get("valid_from"),
+                    commit=False
+                )
+                ids.append(fid)
+            await conn.commit()
+            return ids
+        except (sqlite3.Error, OSError, ValueError):
+            await conn.rollback()
+            raise
 
     async def search(
         self,
@@ -114,7 +148,7 @@ class FactManager:
             )
             if results:
                 pass # Continue to graph resolution below
-        except Exception as e:
+        except (sqlite3.Error, OSError, ValueError) as e:
             logger.warning("Semantic search failed: %s", e)
         
         if not results:
@@ -225,6 +259,24 @@ class FactManager:
         rows = await cursor.fetchall()
         return [row_to_fact(row) for row in rows]
 
+    async def time_travel(self, tx_id: int, project: str | None = None) -> list[Fact]:
+        """Reconstruct state as of transaction ID."""
+        from cortex.temporal import time_travel_filter
+        conn = await self.engine.get_conn()
+        clause, params = time_travel_filter(tx_id, table_alias="f")
+        query = f"SELECT {_FACT_COLUMNS} {_FACT_JOIN} WHERE {clause}"
+        if project:
+            query += " AND f.project = ?"
+            params.append(project)
+        query += " ORDER BY f.id ASC"
+        cursor = await conn.execute(query, params)
+        rows = await cursor.fetchall()
+        return [row_to_fact(row) for row in rows]
+
+    async def reconstruct_state(self, tx_id: int, project: str | None = None) -> list[Fact]:
+        """Alias for time_travel."""
+        return await self.time_travel(tx_id, project)
+
     async def register_ghost(self, reference: str, context: str, project: str) -> int:
         conn = await self.engine.get_conn()
         cursor = await conn.execute(
@@ -272,7 +324,7 @@ class FactManager:
             try:
                 cursor = conn.execute("SELECT COUNT(*) FROM fact_embeddings")
                 embeddings = cursor.fetchone()[0]
-            except Exception:
+            except (sqlite3.Error, OSError, ValueError):
                 embeddings = 0
         finally:
             conn.close()

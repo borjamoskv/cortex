@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import sqlite3
 
 from cortex.engine.models import Fact
 from cortex.search import SearchResult, semantic_search, text_search
@@ -44,7 +45,7 @@ class QueryMixin:
                     project,
                     as_of,
                 )
-            except Exception as e:
+            except (sqlite3.Error, OSError) as e:
                 logger.warning("Semantic search failed: %s", e)
 
             if not results:
@@ -182,7 +183,7 @@ class QueryMixin:
             try:
                 cursor = await conn.execute("SELECT COUNT(*) FROM fact_embeddings")
                 embeddings = (await cursor.fetchone())[0]
-            except Exception:
+            except (sqlite3.Error, OSError):
                 embeddings = 0
 
             return {

@@ -277,3 +277,29 @@ class GateStatusResponse(BaseModel):
     expired: int = 0
     executed: int = 0
     total_audit_entries: int = 0
+
+
+# ─── Context Engine Models ───────────────────────────────────────────
+
+
+class ContextSignalModel(BaseModel):
+    source: str
+    signal_type: str
+    content: str
+    project: str | None = None
+    timestamp: str
+    weight: float
+
+
+class ProjectScoreModel(BaseModel):
+    project: str
+    score: float
+
+
+class ContextSnapshotResponse(BaseModel):
+    active_project: str | None = None
+    confidence: str
+    signals_used: int
+    summary: str
+    top_signals: list[ContextSignalModel] = Field(default_factory=list)
+    projects_ranked: list[ProjectScoreModel] = Field(default_factory=list)

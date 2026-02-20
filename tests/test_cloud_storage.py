@@ -164,16 +164,22 @@ class TestEmbeddingManagerModes:
     def test_default_mode_is_local(self):
         with patch.dict(os.environ, {}, clear=True):
             os.environ.pop("CORTEX_EMBEDDINGS", None)
+            from cortex import config
+            config.reload()
             from cortex.embeddings.manager import EmbeddingManager
 
-            mgr = EmbeddingManager()
+            mgr = EmbeddingManager(engine=MagicMock())
             assert mgr.mode == "local"
             assert not mgr.is_cloud
 
+
     def test_api_mode(self):
         with patch.dict(os.environ, {"CORTEX_EMBEDDINGS": "api"}):
+            from cortex import config
+            config.reload()
             from cortex.embeddings.manager import EmbeddingManager
 
-            mgr = EmbeddingManager()
+            mgr = EmbeddingManager(engine=MagicMock())
             assert mgr.mode == "api"
             assert mgr.is_cloud
+

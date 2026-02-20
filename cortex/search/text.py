@@ -39,7 +39,7 @@ async def text_search(
             rows = await _fts5_search(conn, query, project, fact_type, tags, limit, as_of)
         else:
             rows = await _like_search(conn, query, project, fact_type, tags, limit, as_of)
-    except Exception as e:
+    except (sqlite3.Error, OSError, ValueError) as e:
         logger.error("Text search failed: %s", e)
         return []
     return _rows_to_results(rows, is_fts=use_fts)
@@ -144,7 +144,7 @@ def text_search_sync(
 
         cursor = conn.execute(sql, params)
         rows = cursor.fetchall()
-    except Exception as e:
+    except (sqlite3.Error, OSError, ValueError) as e:
         logger.error("Text search sync failed: %s", e)
         return []
     return [_parse_row_sync(row, use_fts) for row in rows]

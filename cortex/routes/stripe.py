@@ -19,6 +19,7 @@ Environment variables:
 import hashlib
 import logging
 import os
+import sqlite3
 import time
 
 from fastapi import APIRouter, Header, HTTPException, Request
@@ -88,7 +89,7 @@ async def stripe_webhook(
                     tenant_id=customer_email,
                     permissions=PLAN_CONFIG.get(plan, PLAN_CONFIG["pro"])["permissions"],
                 )
-        except Exception as e:
+        except (sqlite3.Error, OSError, RuntimeError) as e:
             logger.error("Failed to create CORTEX key: %s", e)
 
         return {

@@ -7,6 +7,7 @@ Parte de la Arquitectura de Soberanía Wave 5.
 
 import hashlib
 import logging
+import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -112,7 +113,7 @@ class ImmutableVoteLedger:
                 vote=vote, vote_weight=vote_weight, prev_hash=prev_hash,
                 hash=entry_hash, timestamp=timestamp, signature=signature
             )
-        except Exception as e:
+        except (sqlite3.Error, OSError) as e:
             if should_commit:
                 await conn.rollback()
             logger.error(f"Fallo al registrar voto inmutable: {e}")
@@ -188,7 +189,7 @@ class ImmutableVoteLedger:
             if should_commit:
                 await conn.commit()
             return root
-        except Exception as e:
+        except (sqlite3.Error, OSError) as e:
             if should_commit:
                 await conn.rollback()
             raise e

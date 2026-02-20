@@ -52,7 +52,7 @@ class LLMManager:
 
             self._provider = LLMProvider(provider=self._provider_name)
             logger.info("LLM provider loaded: %s", self._provider)
-        except Exception as e:
+        except (OSError, RuntimeError, ValueError) as e:
             logger.error(
                 "Failed to initialize LLM provider '%s': %s",
                 self._provider_name, e,

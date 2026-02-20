@@ -57,7 +57,7 @@ class Cortex:
         timeout: Request timeout in seconds (default: 30)
 
     Example:
-        >>> ctx = Cortex("http://localhost:8000", api_key="sk-xxx")
+        >>> ctx = Cortex("http://localhost:8000", api_key="sk-12345")
         >>> ctx.store("user likes techno", project="music")
         42
         >>> ctx.search("what music?", top_k=3)

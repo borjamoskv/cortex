@@ -1,39 +1,47 @@
-# CORTEX — The Sovereign Ledger for AI Agents
+# CORTEX — Trust Infrastructure for Autonomous AI
 
-> Local-first memory infrastructure with vector search, temporal facts, and cryptographic vaults.
+> Cryptographic verification, audit trails, and EU AI Act compliance for AI agent memory.
 
-## Quick Start for Agents
+## What is CORTEX?
 
-CORTEX is designed to be used by AI agents via the **Model Context Protocol (MCP)**.
+CORTEX is a local-first trust engine that provides cryptographic verification, immutable audit trails, and regulatory compliance reports for AI agent decisions. It sits on top of any memory layer (Mem0, Zep, Letta, or custom) and proves that agent memories are tamper-proof and auditable.
 
-### MCP Server Config
+## Core Architecture
 
-```json
-{
-  "mcpServers": {
-    "cortex": {
-      "command": "python",
-      "args": ["-m", "cortex.mcp"]
-    }
-  }
-}
-```
+- **Storage**: SQLite 3.42+ with sqlite-vec extension (384-dim embeddings)
+- **Integrity**: SHA-256 hash-chained transaction ledger + Merkle tree checkpoints
+- **Consensus**: Reputation-weighted multi-agent verification (RWC)
+- **Search**: Hybrid semantic (vector) + full-text + Graph-RAG retrieval
+- **API**: FastAPI REST + MCP (Model Context Protocol) server
+- **Security**: AES-256-GCM vaults, multi-tenant isolation, rate limiting
 
-### Available Tools
+## Key Endpoints
 
-- `cortex_store(project, content)`: Remember a fact.
-- `cortex_search(query)`: Retrieve relevant memories.
-- `cortex_recall(project)`: Get full project context.
-- `cortex_status()`: System health check.
+- POST /v1/facts — Store a fact with cryptographic ledger entry
+- POST /v1/search — Semantic + Graph-RAG search
+- POST /v1/ask — RAG synthesis (search → LLM → answer)
+- GET /v1/status — Engine statistics
+- POST /v1/missions/dispatch — Multi-agent consensus mission
 
-## Architecture
+## MCP Tools (CORTEX Trust Engine)
 
-- **Engine**: SQLite + sqlite-vec (local vectors)
-- **Embeddings**: ONNX (all-MiniLM-L6-v2) ~384 dim
-- **Integrity**: SHA-256 hash-chained ledger
-- **Protocol**: MCP (Model Context Protocol)
+- cortex_store — Store facts with automatic hash chaining
+- cortex_search — Hybrid semantic search
+- cortex_status — System health and metrics
+- cortex_ledger_verify — Full ledger integrity check
+- cortex_audit_trail — Generate EU AI Act compliant audit log
+- cortex_verify_fact — Cryptographic verification certificate for a single fact
+- cortex_compliance_report — Article 12 compliance snapshot with score
+- cortex_decision_lineage — Trace decision chains for explainability
 
-## Documentation
+## EU AI Act Alignment (Article 12)
 
-Full documentation available in `README.md`.
-Source code: https://github.com/borjamoskv/cortex
+- Art. 12.1: Automatic event logging ✅ (transaction ledger)
+- Art. 12.2: Decision recording ✅ (fact storage with provenance)
+- Art. 12.3: Tamper-proof storage ✅ (SHA-256 hash chain)
+- Art. 12.4: Periodic verification ✅ (Merkle checkpoints)
+- Art. 12.2d: Agent traceability ✅ (tag-based agent tracking)
+
+## License
+
+BSL-1.1. Free for non-production use. Apache 2.0 after 2030-01-01.

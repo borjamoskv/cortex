@@ -1,6 +1,7 @@
 import json
 import logging
 import shutil
+import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -58,7 +59,7 @@ class SnapshotManager:
                 safe_path = str(dest_path).replace("'", "''")
                 await conn.execute(f"VACUUM INTO '{safe_path}'")
                 logger.info("Snapshot created via VACUUM INTO: %s", dest_path)
-            except Exception as e:
+            except (sqlite3.Error, OSError, ValueError) as e:
                 logger.error("Snapshot creation failed: %s", e)
                 raise
 
@@ -111,7 +112,7 @@ class SnapshotManager:
                                 size_mb=data["size_mb"],
                             )
                         )
-            except Exception as e:
+            except (sqlite3.Error, OSError, ValueError) as e:
                 logger.warning("Failed to load snapshot metadata from %s: %s", meta_file, e)
 
         return sorted(snapshots, key=lambda s: s.created_at, reverse=True)
@@ -140,7 +141,7 @@ class SnapshotManager:
             for wal_file in self.db_path.parent.glob(f"{self.db_path.name}-*"):
                 wal_file.unlink()
             return True
-        except Exception as e:
+        except (sqlite3.Error, OSError, ValueError) as e:
             logger.error("Failed to restore snapshot: %s", e)
             shutil.copy2(backup_path, self.db_path)
             return False

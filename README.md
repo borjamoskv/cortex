@@ -1,7 +1,7 @@
-# CORTEX — The Sovereign Ledger for AI Agents
+# CORTEX — Trust Infrastructure for Autonomous AI
 
-> **Local-first memory infrastructure with vector search, temporal facts, cryptographic vaults, and a persistent watchdog daemon.**
-> *Zero network dependencies. 100% Sovereign.*
+> **Cryptographic verification, audit trails, and compliance for AI agent memory.**
+> *The layer that proves your agents' decisions are true.*
 
 ![License](https://img.shields.io/badge/license-BSL%201.1-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)
@@ -11,83 +11,130 @@
 
 ---
 
-## Why CORTEX?
+## The Problem
 
-> **"You don't need to scale people. You need to scale context."**
-> — [Read the Manifesto](MANIFESTO.md)
+AI agents are making millions of decisions per day. But **who verifies those decisions are correct?**
 
-Most AI memory solutions are either:
-1. **Cloud SaaS** (Pinecone, Mem0) — You lose data sovereignty and privacy.
-2. **Simple Vector DBs** (Chroma, FAISS) — No history, no time-travel, no cryptographic proof.
+- **Mem0** stores what agents remember. But can you prove the memory wasn't tampered with?
+- **Zep** builds knowledge graphs. But can you audit the chain of reasoning?
+- **Letta** manages agent state. But can you generate a compliance report for regulators?
 
-**CORTEX is different.** It is an **Industrial-grade memory engine** designed for autonomous agents that need to remember *facts*, not just vectors.
+The **EU AI Act (Article 12, enforced August 2026)** requires:
+- ✅ Automatic logging of all agent decisions
+- ✅ Tamper-proof storage of decision records
+- ✅ Full traceability and explainability
+- ✅ Periodic integrity verification
 
-### Key Features
+**Fines: up to €30M or 6% of global revenue.**
 
-- 🧠 **Sovereign Memory**: Runs locally on `sqlite-vec`. Your data never leaves your machine.
-- ⏳ **Temporal Facts**: Every fact has `valid_from` and `valid_until`. Ask *"What did I know last week?"*
-- 🛡️ **Cryptographic Ledger**: SHA-256 hash chain + Merkle Trees ensure history is tamper-evident.
-- 🔌 **MCP Server**: Native [Model Context Protocol](https://modelcontextprotocol.io) support. Plug-and-play with Claude, Cursor, or any MCP client.
-- ⚡ **Fastest in Class**: <5ms embedding latency (ONNX quantized) + async connection pooling.
-- 🌍 **Multi-Tenant**: Scoped by `project` and `tenant_id` with granular API keys.
+## The Solution
 
----
+CORTEX doesn't replace your memory layer — it **certifies** it.
 
-## Comparativa
+```
+Your Memory Layer (Mem0 / Zep / Letta / Custom)
+        ↓
+   CORTEX Trust Engine
+        ├── SHA-256 hash-chained ledger
+        ├── Merkle tree checkpoints
+        ├── Reputation-weighted consensus
+        └── EU AI Act compliance reports
+```
 
-| Feature | **CORTEX** | Mem0 | ChromaDB | Pinecone |
-|:---|:---:|:---:|:---:|:---:|
-| **Local-First** | ✅ | ❌ | ✅ | ❌ |
-| **Vector Search** | ✅ | ✅ | ✅ | ✅ |
-| **Temporal Context** | ✅ **(Native)** | ❌ | ❌ | ❌ |
-| **Tamper-Proof Ledger** | ✅ **(Merkle)** | ❌ | ❌ | ❌ |
-| **MCP Support** | ✅ | ❌ | ❌ | ❌ |
-| **Cost** | **Free (Self-Hosted)** | $$$ | Free | $$$ |
+### Core Capabilities
+
+| Capability | What It Does | EU AI Act |
+|:---|:---|:---:|
+| 🔗 **Immutable Ledger** | Every fact is hash-chained. Tamper = detectable. | Art. 12.3 |
+| 🌳 **Merkle Checkpoints** | Periodic batch verification of ledger integrity | Art. 12.4 |
+| 📋 **Audit Trail** | Timestamped, hash-verified log of all decisions | Art. 12.1 |
+| 🔍 **Decision Lineage** | Trace how an agent arrived at any conclusion | Art. 12.2d |
+| 🤝 **Consensus (RWC)** | Multi-agent verification with reputation scoring | Art. 14 |
+| 📊 **Compliance Report** | One-command regulatory readiness snapshot | Art. 12 |
+| 🧠 **Semantic Search** | Vector + Graph-RAG hybrid retrieval | — |
+| 🏠 **100% Local-First** | SQLite. No cloud. Your data, your machine. | — |
 
 ---
 
 ## Quick Start
 
-### Installation
+### Install
 
 ```bash
 pip install cortex-memory
 ```
 
-### Initialize
+### Store a Decision & Verify It
 
 ```bash
-cortex init
+# Store a fact
+cortex store --type decision --project my-agent "Chose OAuth2 PKCE for auth"
+
+# Verify its cryptographic integrity
+cortex verify 42
+# → ✅ VERIFIED — Hash chain intact, Merkle sealed
+
+# Generate compliance report
+cortex compliance-report
+# → Compliance Score: 5/5 — All Article 12 requirements met
 ```
 
-### Store & Recall
+### Run as MCP Server (Universal IDE Plugin)
 
 ```bash
-# Store a fact (CLI)
-cortex store --project my-agent "User prefers dark mode and Python"
-
-# Semantic Search
-cortex search "What are the user preferences?"
-# > [0.92] User prefers dark mode and Python (valid_from: 2026-02-18)
+# Works with: Claude Code, Cursor, OpenClaw, Windsurf, Antigravity
+python -m cortex.mcp
 ```
 
-### Run Server (API + MCP)
+### Run as REST API
 
 ```bash
-# Start the full server (REST API + MCP)
 uvicorn cortex.api:app --port 8484
 ```
 
 ---
 
+## Competitive Landscape
+
+| | **CORTEX** | Mem0 | Zep | Letta | RecordsKeeper | UtopIQ |
+|:---|:---:|:---:|:---:|:---:|:---:|:---:|
+| **Cryptographic Ledger** | ✅ | ❌ | ❌ | ❌ | ✅ (blockchain) | ✅ (blockchain) |
+| **Merkle Checkpoints** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Multi-Agent Consensus** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Local-First** | ✅ | ❌ | ❌ | ✅ | ❌ | ❌ |
+| **No Blockchain Overhead** | ✅ | — | — | — | ❌ | ❌ |
+| **MCP Native** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **EU AI Act Ready** | ✅ | ❌ | ❌ | ❌ | Partial | Partial |
+| **Cost** | **Free** | $249/mo | $$$ | Free | $$$ | $$$ |
+
+---
+
 ## Architecture
 
-CORTEX is built on the **Industrial Noir** stack:
+```
+┌─────────────────────────────────────────┐
+│         CORTEX Trust Engine             │
+├─────────────┬─────────────┬─────────────┤
+│  Facts DB   │  Ledger     │  Consensus  │
+│  (sqlite)   │  (SHA-256)  │  (RWC)      │
+├─────────────┼─────────────┼─────────────┤
+│  Embeddings │  Merkle     │  Reputation  │
+│  (ONNX)     │  (Trees)    │  (Weighted)  │
+├─────────────┴─────────────┴─────────────┤
+│  REST API (FastAPI) │ MCP Server (stdio) │
+└─────────────────────┴────────────────────┘
+```
 
-1.  **Storage**: SQLite 3.42+ with `sqlite-vec` extension.
-2.  **Embeddings**: `sentence-transformers/all-MiniLM-L6-v2` (ONNX quantized) running locally.
-3.  **Engine**: Python 3.12+ AsyncIO engine with connection pooling.
-4.  **Security**: AES-256-GCM vaults for secrets + SHA-256 ledger for integrity.
+---
+
+## Integrations
+
+CORTEX plugs into your existing stack:
+
+- **IDEs**: Claude Code, Cursor, OpenClaw, Windsurf, Antigravity (via MCP)
+- **Frameworks**: LangChain, CrewAI, AutoGen, Google ADK
+- **Memory Layers**: Sits on top of Mem0, Zep, Letta as verification layer
+- **Deployment**: Docker, Kubernetes, bare metal, or just `pip install`
 
 ---
 

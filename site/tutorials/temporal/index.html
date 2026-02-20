@@ -1032,12 +1032,16 @@
 <h2 id="debugging-workflow">Debugging Workflow</h2>
 <ol>
 <li><strong>Incident occurs</strong> at a specific time</li>
-<li><strong>Query CORTEX</strong> for the state at that time:
-   <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>cortex<span class="w"> </span><span class="nb">history</span><span class="w"> </span>production<span class="w"> </span>--at<span class="w"> </span><span class="s2">&quot;2026-02-10T03:15:00&quot;</span>
-</code></pre></div></li>
-<li><strong>Compare</strong> with current state:
-   <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>cortex<span class="w"> </span>recall<span class="w"> </span>production
-</code></pre></div></li>
+<li><strong>Query CORTEX</strong> for the state at that time:</li>
+</ol>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>cortex<span class="w"> </span><span class="nb">history</span><span class="w"> </span>production<span class="w"> </span>--at<span class="w"> </span><span class="s2">&quot;2026-02-10T03:15:00&quot;</span>
+</code></pre></div>
+<ol>
+<li><strong>Compare</strong> with current state:</li>
+</ol>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>cortex<span class="w"> </span>recall<span class="w"> </span>production
+</code></pre></div>
+<ol>
 <li><strong>Identify</strong> what changed between then and now</li>
 </ol>
 <h2 id="transaction-ledger">Transaction Ledger</h2>

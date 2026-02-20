@@ -240,10 +240,44 @@ CREATE TABLE IF NOT EXISTS graph_outbox (
 );
 """
 
+# ─── Compactor Logs (Memory Optimization tracking) ────────────────────
+CREATE_COMPACTION_LOG = """
+CREATE TABLE IF NOT EXISTS compaction_log (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    project         TEXT NOT NULL,
+    strategy        TEXT NOT NULL,
+    original_ids    TEXT, -- JSON list
+    new_fact_id     INTEGER,
+    facts_before    INTEGER,
+    facts_after     INTEGER,
+    timestamp       TEXT NOT NULL DEFAULT (datetime('now'))
+);
+"""
+
 CREATE_GRAPH_OUTBOX_INDEXES = """
 CREATE INDEX IF NOT EXISTS idx_graph_outbox_status ON graph_outbox(status);
 CREATE INDEX IF NOT EXISTS idx_graph_outbox_fact ON graph_outbox(fact_id);
 """
+
+# ─── Context Snapshots (Ambient Intelligence) ────────────────────────
+CREATE_CONTEXT_SNAPSHOTS = """
+CREATE TABLE IF NOT EXISTS context_snapshots (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    active_project  TEXT,
+    confidence      TEXT NOT NULL,
+    signals_used    INTEGER NOT NULL,
+    summary         TEXT NOT NULL,
+    signals_json    TEXT,
+    projects_json   TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+"""
+
+CREATE_CONTEXT_SNAPSHOTS_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_ctx_snap_project ON context_snapshots(active_project);
+CREATE INDEX IF NOT EXISTS idx_ctx_snap_created ON context_snapshots(created_at);
+"""
+
 
 # ─── All statements in order ─────────────────────────────────────────
 ALL_SCHEMA = [
@@ -268,7 +302,11 @@ ALL_SCHEMA = [
     CREATE_GHOSTS_INDEX,
     CREATE_GRAPH_OUTBOX,
     CREATE_GRAPH_OUTBOX_INDEXES,
+    CREATE_COMPACTION_LOG,
+    CREATE_CONTEXT_SNAPSHOTS,
+    CREATE_CONTEXT_SNAPSHOTS_INDEX,
 ]
+
 
 
 def get_init_meta() -> list[tuple[str, str]]:

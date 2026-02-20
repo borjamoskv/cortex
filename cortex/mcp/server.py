@@ -1,6 +1,7 @@
 """MCP Server Implementation.
 
-Core logic for the CORTEX MCP server.
+Core logic for the CORTEX MCP Trust Server.
+Provides memory, search, and EU AI Act compliance tools.
 """
 
 import asyncio
@@ -11,6 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 from cortex.engine import CortexEngine
 from cortex.engine.ledger import ImmutableLedger
 from cortex.mcp.guard import MCPGuard
+from cortex.mcp.trust_tools import register_trust_tools
 from cortex.mcp.utils import (
     AsyncConnectionPool,
     MCPMetrics,
@@ -216,13 +218,17 @@ def create_mcp_server(config: MCPServerConfig | None = None) -> "FastMCP":
         raise ImportError("MCP SDK not installed. Install with: pip install 'cortex-memory[mcp]'")
 
     cfg = config or MCPServerConfig()
-    mcp = FastMCP("CORTEX Memory v2")
+    mcp = FastMCP("CORTEX Trust Engine")
     ctx = _MCPContext(cfg)
 
+    # Core memory tools
     _register_store_tool(mcp, ctx)
     _register_search_tool(mcp, ctx)
     _register_status_tool(mcp, ctx)
     _register_ledger_tool(mcp, ctx)
+
+    # Trust & Compliance tools (EU AI Act Art. 12)
+    register_trust_tools(mcp, ctx)
 
     return mcp
 

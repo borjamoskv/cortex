@@ -3,12 +3,14 @@ CORTEX v4.0 - Agents Router (Reputation Management).
 """
 
 import logging
+import sqlite3
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from cortex.api_deps import get_async_engine
 from cortex.auth import AuthResult, require_permission
 from cortex.engine_async import AsyncCortexEngine
+from cortex.i18n import get_trans
 from cortex.models import AgentRegisterRequest, AgentResponse
 
 router = APIRouter(tags=["agents"])
@@ -18,6 +20,7 @@ logger = logging.getLogger("uvicorn.error")
 @router.post("/v1/agents", response_model=AgentResponse)
 async def register_agent(
     req: AgentRegisterRequest,
+    request: Request,
     auth: AuthResult = Depends(require_permission("admin")),
     engine: AsyncCortexEngine = Depends(get_async_engine),
 ) -> AgentResponse:
@@ -32,7 +35,8 @@ async def register_agent(
 
         agent = await engine.get_agent(agent_id)
         if not agent:
-            raise HTTPException(status_code=500, detail="Failed to retrieve registered agent")
+            lang = request.headers.get("Accept-Language", "en")
+            raise HTTPException(status_code=500, detail=get_trans("error_agent_registration_failed", lang))
 
         return AgentResponse(
             agent_id=agent["id"],
@@ -43,21 +47,24 @@ async def register_agent(
         )
     except HTTPException:
         raise
-    except Exception:
+    except (sqlite3.Error, OSError, RuntimeError):
         logger.exception("Agent registration failed")
-        raise HTTPException(status_code=500, detail="Internal registration error") from None
+        lang = request.headers.get("Accept-Language", "en")
+        raise HTTPException(status_code=500, detail=get_trans("error_agent_internal", lang)) from None
 
 
 @router.get("/v1/agents/{agent_id}", response_model=AgentResponse)
 async def get_agent(
     agent_id: str,
+    request: Request,
     auth: AuthResult = Depends(require_permission("read")),
     engine: AsyncCortexEngine = Depends(get_async_engine),
 ) -> AgentResponse:
     """Get agent details and current reputation."""
     agent = await engine.get_agent(agent_id)
     if not agent:
-        raise HTTPException(status_code=404, detail="Agent not found")
+        lang = request.headers.get("Accept-Language", "en")
+        raise HTTPException(status_code=404, detail=get_trans("error_agent_not_found", lang))
 
     return AgentResponse(
         agent_id=agent["id"],
